@@ -2,6 +2,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <cstring>
+
 namespace auto_aim
 {
 namespace multithread
@@ -40,8 +42,10 @@ MultiThreadDetector::MultiThreadDetector(const std::string & config_path, bool d
   tools::logger()->info("[MultiThreadDetector] initialized !");
 }
 
-void MultiThreadDetector::push(cv::Mat img, std::chrono::steady_clock::time_point t)
+bool MultiThreadDetector::push(cv::Mat img, std::chrono::steady_clock::time_point t)
 {
+  if (queue_.full()) return false;
+
   auto x_scale = static_cast<double>(640) / img.rows;
   auto y_scale = static_cast<double>(640) / img.cols;
   auto scale = std::min(x_scale, y_scale);
@@ -55,11 +59,12 @@ void MultiThreadDetector::push(cv::Mat img, std::chrono::steady_clock::time_poin
 
   auto input_port = compiled_model_.input();
   auto infer_request = compiled_model_.create_infer_request();
-  ov::Tensor input_tensor(ov::element::u8, {1, 640, 640, 3}, input.data);
+  ov::Tensor input_tensor(ov::element::u8, {1, 640, 640, 3});
+  std::memcpy(input_tensor.data(), input.data, input.total() * input.elemSize());
 
   infer_request.set_input_tensor(input_tensor);
   infer_request.start_async();
-  queue_.push({img.clone(), t, std::move(infer_request)});
+  return queue_.push({img.clone(), t, std::move(infer_request)});
 }
 
 std::tuple<std::list<Armor>, std::chrono::steady_clock::time_point> MultiThreadDetector::pop()
@@ -77,6 +82,25 @@ std::tuple<std::list<Armor>, std::chrono::steady_clock::time_point> MultiThreadD
   auto armors = yolo_.postprocess(scale, output, img, 0);  //暂不支持ROI
 
   return {std::move(armors), t};
+}
+
+bool MultiThreadDetector::try_pop(std::list<Armor> & armors, std::chrono::steady_clock::time_point & t)
+{
+  std::tuple<cv::Mat, std::chrono::steady_clock::time_point, ov::InferRequest> item;
+  if (!queue_.try_pop(item)) return false;
+
+  auto [img, timestamp, infer_request] = std::move(item);
+  infer_request.wait();
+
+  auto output_tensor = infer_request.get_output_tensor();
+  auto output_shape = output_tensor.get_shape();
+  cv::Mat output(output_shape[1], output_shape[2], CV_32F, output_tensor.data());
+  auto x_scale = static_cast<double>(640) / img.rows;
+  auto y_scale = static_cast<double>(640) / img.cols;
+  auto scale = std::min(x_scale, y_scale);
+  armors = yolo_.postprocess(scale, output, img, 0);
+  t = timestamp;
+  return true;
 }
 
 std::tuple<cv::Mat, std::list<Armor>, std::chrono::steady_clock::time_point>

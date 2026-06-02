@@ -20,9 +20,11 @@ class MultiThreadDetector
 public:
   MultiThreadDetector(const std::string & config_path, bool debug = false);
 
-  void push(cv::Mat img, std::chrono::steady_clock::time_point t);
+  bool push(cv::Mat img, std::chrono::steady_clock::time_point t);
 
   std::tuple<std::list<Armor>, std::chrono::steady_clock::time_point> pop();  //暂时不支持yolov8
+
+  bool try_pop(std::list<Armor> & armors, std::chrono::steady_clock::time_point & t);
 
   std::tuple<cv::Mat, std::list<Armor>, std::chrono::steady_clock::time_point> debug_pop();
 

@@ -1,7 +1,6 @@
 #include "yolov8.hpp"
 
 #include <fmt/chrono.h>
-#include <omp.h>
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>

@@ -15,6 +15,7 @@ find_package(cv_bridge REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(OpenVINO REQUIRED COMPONENTS Runtime)
+find_package(Threads REQUIRED)
 find_package(fmt REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -42,6 +43,10 @@ add_library(aim_v2_core STATIC
   ${VISION_CORE_DIR}/tasks/auto_aim/yolos/yolov5.cpp
   ${VISION_CORE_DIR}/tasks/auto_aim/yolos/yolov8.cpp
   ${VISION_CORE_DIR}/tasks/auto_aim/multithread/mt_detector.cpp
+  ${VISION_CORE_DIR}/tasks/auto_aim/planner/planner.cpp
+  ${VISION_CORE_DIR}/tasks/auto_aim/planner/tinympc/admm.cpp
+  ${VISION_CORE_DIR}/tasks/auto_aim/planner/tinympc/rho_benchmark.cpp
+  ${VISION_CORE_DIR}/tasks/auto_aim/planner/tinympc/tiny_api.cpp
 )
 
 target_include_directories(aim_v2_core PUBLIC
@@ -78,6 +83,7 @@ ament_target_dependencies(aim_v2_node
 
 target_link_libraries(aim_v2_node
   aim_v2_core
+  Threads::Threads
 )
 
 install(TARGETS

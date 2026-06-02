@@ -75,6 +75,15 @@ decision_speed: 12 # rad/s
 high_speed_delay_time: 0.005 # s
 low_speed_delay_time: 0.005 # s
 
+#####-----planner MPC参数-----#####
+fire_thresh: 0.0035
+max_yaw_acc: 50
+Q_yaw: [9000000.0, 0]
+R_yaw: [1]
+max_pitch_acc: 100
+Q_pitch: [9000000.0, 0]
+R_pitch: [1]
+
 #####-----decider参数-----#####
 mode: 1
 

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <mutex>
 #include <queue>
+#include <utility>
 
 namespace tools
 {
@@ -19,7 +20,7 @@ public:
   {
   }
 
-  void push(const T & value)
+  bool push(T value)
   {
     std::unique_lock<std::mutex> lock(mutex_);
 
@@ -28,12 +29,13 @@ public:
         queue_.pop();
       } else {
         full_handler_();
-        return;
+        return false;
       }
     }
 
-    queue_.push(value);
+    queue_.push(std::move(value));
     not_empty_condition_.notify_all();
+    return true;
   }
 
   void pop(T & value)
@@ -60,6 +62,22 @@ public:
     T value = std::move(queue_.front());
     queue_.pop();
     return std::move(value);
+  }
+
+  bool try_pop(T & value)
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (queue_.empty()) return false;
+
+    value = std::move(queue_.front());
+    queue_.pop();
+    return true;
+  }
+
+  bool full()
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return queue_.size() >= max_size_;
   }
 
   T front()

@@ -32,8 +32,8 @@ void ProtocolInfantry32::send(const rm_interfaces::msg::GimbalCmd &data) {
   packet.loadData<float>(static_cast<float>(safe_data.distance), 10);
   packet.loadData<float>(static_cast<float>(safe_data.pitch_v), 14);
   packet.loadData<float>(static_cast<float>(safe_data.yaw_v), 18);
-  packet.loadData<float>(static_cast<float>(safe_data.pitch_v), 22);
-  packet.loadData<float>(static_cast<float>(safe_data.yaw_v), 26);
+  packet.loadData<float>(static_cast<float>(safe_data.pitch_a), 22);
+  packet.loadData<float>(static_cast<float>(safe_data.yaw_a), 26);
   packet_tool_->sendPacket(packet);
 }
 

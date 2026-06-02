@@ -59,6 +59,26 @@ def generate_launch_description():
         default_value="false",
         description="Allow aim_v2 to set fire_advice",
     )
+    declare_control_backend = DeclareLaunchArgument(
+        "control_backend",
+        default_value="planner",
+        description="SP control backend: planner | aimer",
+    )
+    declare_enemy_color = DeclareLaunchArgument(
+        "enemy_color",
+        default_value="",
+        description="Initial enemy color override: red | blue. Empty uses aim_v2 config.",
+    )
+    declare_derive_enemy_color_from_mode = DeclareLaunchArgument(
+        "derive_enemy_color_from_mode",
+        default_value="true",
+        description="Switch enemy color from serial vision mode 0/1",
+    )
+    declare_async_inference = DeclareLaunchArgument(
+        "async_inference",
+        default_value="true",
+        description="Use SP OpenVINO start_async detector pipeline when available",
+    )
     declare_detector_type = DeclareLaunchArgument(
         "detector_type",
         default_value="yolo",
@@ -149,6 +169,12 @@ def generate_launch_description():
             {
                 "respect_mode": LaunchConfiguration("respect_mode"),
                 "enable_fire": LaunchConfiguration("enable_fire"),
+                "control_backend": LaunchConfiguration("control_backend"),
+                "enemy_color": LaunchConfiguration("enemy_color"),
+                "derive_enemy_color_from_mode": LaunchConfiguration(
+                    "derive_enemy_color_from_mode"
+                ),
+                "async_inference": LaunchConfiguration("async_inference"),
                 "detector_type": LaunchConfiguration("detector_type"),
             }
         ],
@@ -166,6 +192,10 @@ def generate_launch_description():
             declare_namespace,
             declare_respect_mode,
             declare_enable_fire,
+            declare_control_backend,
+            declare_enemy_color,
+            declare_derive_enemy_color_from_mode,
+            declare_async_inference,
             declare_detector_type,
             PushRosNamespace(LaunchConfiguration("namespace")),
             TimerAction(period=1.0, actions=[OpaqueFunction(function=create_serial_node)]),

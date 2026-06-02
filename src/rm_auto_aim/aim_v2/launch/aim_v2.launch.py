@@ -24,6 +24,26 @@ def generate_launch_description():
     enable_fire_arg = DeclareLaunchArgument(
         "enable_fire", default_value="false", description="Allow fire_advice output"
     )
+    control_backend_arg = DeclareLaunchArgument(
+        "control_backend",
+        default_value="planner",
+        description="SP control backend: planner | aimer",
+    )
+    enemy_color_arg = DeclareLaunchArgument(
+        "enemy_color",
+        default_value="",
+        description="Initial enemy color override: red | blue. Empty uses config.",
+    )
+    derive_enemy_color_from_mode_arg = DeclareLaunchArgument(
+        "derive_enemy_color_from_mode",
+        default_value="true",
+        description="Switch enemy color from serial vision mode 0/1",
+    )
+    async_inference_arg = DeclareLaunchArgument(
+        "async_inference",
+        default_value="true",
+        description="Use SP OpenVINO start_async detector pipeline when available",
+    )
     detector_type_arg = DeclareLaunchArgument(
         "detector_type", default_value="yolo", description="yolo or traditional"
     )
@@ -38,6 +58,12 @@ def generate_launch_description():
             {
                 "respect_mode": LaunchConfiguration("respect_mode"),
                 "enable_fire": LaunchConfiguration("enable_fire"),
+                "control_backend": LaunchConfiguration("control_backend"),
+                "enemy_color": LaunchConfiguration("enemy_color"),
+                "derive_enemy_color_from_mode": LaunchConfiguration(
+                    "derive_enemy_color_from_mode"
+                ),
+                "async_inference": LaunchConfiguration("async_inference"),
                 "detector_type": LaunchConfiguration("detector_type"),
             }
         ],
@@ -55,6 +81,10 @@ def generate_launch_description():
             cmd_topic_arg,
             respect_mode_arg,
             enable_fire_arg,
+            control_backend_arg,
+            enemy_color_arg,
+            derive_enemy_color_from_mode_arg,
+            async_inference_arg,
             detector_type_arg,
             aim_node,
         ]

@@ -1,33 +1,172 @@
+# ============================================================
+# SP25 aim_v2 自瞄核心参数
+# ============================================================
+#
+# 这个文件由 aim_v2_node 读取，负责 SP25 检测、解算、跟踪、瞄准、
+# Planner/TinyMPC 和射击判断参数。
+#
+# 启动开关不在这里：
+#   detector_type / control_backend / enable_fire / async_inference
+#   请到 src/rm_bringup/config/launch_params_decoupled.yaml 的 aim_v2 段修改。
+#
+# 常调顺序建议：
+#   1. enemy_color / yolo_name / device / min_confidence
+#   2. yaw_offset / pitch_offset
+#   3. tracker 临时丢失帧数
+#   4. planner MPC 参数
+#   5. camera_matrix / R_camera2gimbal / t_camera2gimbal
+
+
+# ============================================================
+# 1. 目标颜色和神经网络检测
+# ============================================================
+
+# 默认敌方颜色。bringup_v2 中 derive_enemy_color_from_mode=true 时，
+# 这个值会被 /serial/receive.mode 自动覆盖。
 enemy_color: "red"
 # enemy_color: "blue"
 
-
-#####-----神经网络参数-----#####
+# 使用哪个 YOLO 模型：yolov5 / yolov8 / yolo11
 yolo_name: yolov5
+
+# OpenVINO 推理设备：CPU / GPU / AUTO
+# 离线调试优先 CPU。
+device: CPU
+
+# 检测置信度阈值。越高误检越少，漏检可能增加。
+min_confidence: 0.8
+
+# 模型路径。相对路径会由 aim_v2_node 自动解析到 aim_v2 share 目录。
 classify_model: assets/tiny_resnet.onnx
 yolo11_model_path: assets/yolo11.xml
 yolov8_model_path: assets/yolov8.xml
 yolov5_model_path: assets/yolov5.xml
-device: CPU
-min_confidence: 0.8
+
+# yolov5 中是否结合传统灯条逻辑。
 use_traditional: true
 
-#####-----ROI-----#####
+# ROI 只在 use_roi=true 时生效。离线调试先保持 false。
+use_roi: false
 roi:
   x: 420
   y: 50
   width: 600
   height: 600
 
-use_roi: false
 
-#####-----工业相机参数-----#####
+# ============================================================
+# 2. 传统灯条检测参数，detector_type=traditional 或部分 YOLO 逻辑会用
+# ============================================================
+
+threshold: 150
+max_angle_error: 45        # degree
+min_lightbar_ratio: 1.5
+max_lightbar_ratio: 20
+min_lightbar_length: 8
+min_armor_ratio: 1
+max_armor_ratio: 5
+max_side_ratio: 1.5
+max_rectangular_error: 25  # degree
+
+
+# ============================================================
+# 3. Tracker 跟踪参数
+# ============================================================
+
+# 连续检测到多少帧后认为目标稳定。
+min_detect_count: 5
+
+# 普通目标临时丢失最大帧数。
+max_temp_lost_count: 15
+
+# 前哨站允许更长临时丢失。
+outpost_max_temp_lost_count: 150
+
+
+# ============================================================
+# 4. Aimer / Planner 共用瞄准参数
+# ============================================================
+
+# 固定偏置，单位 degree。实车确认方向后再调。
+yaw_offset: 0
+pitch_offset: 1.5
+
+# 旋转目标决策角度，单位 degree。
+comming_angle: 70
+leaving_angle: 30
+
+# 旋转目标速度阈值，单位 rad/s。
+min_spin_speed: 2
+decision_speed: 12
+
+# 高/低速目标补偿延迟，单位 s。
+high_speed_delay_time: 0.005
+low_speed_delay_time: 0.005
+
+
+# ============================================================
+# 5. Planner / TinyMPC 参数，control_backend=planner 时使用
+# ============================================================
+
+# 开火角度误差阈值，越小越保守。
+fire_thresh: 0.0035
+
+# 云台加速度限制。
+max_yaw_acc: 50
+max_pitch_acc: 100
+
+# TinyMPC 代价权重。
+Q_yaw: [9000000.0, 0]
+R_yaw: [1]
+Q_pitch: [9000000.0, 0]
+R_pitch: [1]
+
+
+# ============================================================
+# 6. Shooter 射击判断参数
+# ============================================================
+
+# 近距离射击容差，单位 degree。
+first_tolerance: 2
+
+# 远距离射击容差，单位 degree。
+second_tolerance: 0.8
+
+# 近/远距离分界，单位 m。
+judge_distance: 0.5
+
+# SP25 shooter 内部开火开关。最终是否发布 fire_advice 还会受
+# bringup_v2 的 enable_fire 控制。
+auto_fire: true
+
+
+# ============================================================
+# 7. 相机和坐标变换标定，实车精度主要看这里
+# ============================================================
+
+# gimbal 到 imu body 的旋转矩阵。
+R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+
+# 相机内参和畸变参数。
+camera_matrix: [2924.6190997571712, 0, 647.0245571651617, 0, 2927.4258594148396, 388.18625585771758, 0, 0, 1]
+distort_coeffs: [-0.58886594170687334, 0.32512251112647716, 0.012447953238733123, -0.0032411418907421475, 0]
+
+# camera 到 gimbal 的外参。
+R_camera2gimbal: [0.00046423063676173171, 0.033770528223625203, 0.99942950522456209, -0.99970300483287733, 0.024367462669785803, -0.00035901413901253575, -0.02436568525675643, -0.99913251282626891, 0.03377181066266309]
+t_camera2gimbal: [-0.034955523715399906, -0.000074403211899371, 0.001248173910106823]
+
+
+# ============================================================
+# 8. SP25 原始工程保留参数，当前 aim_v2 ROS 链路通常不直接调
+# ============================================================
+
+# 原 SP25 相机参数。当前 HFUT 链路图像来自 /image_raw，相机驱动参数
+# 通常在 rm_bringup/config/<robot>/*camera*_params.yaml 中调。
 camera_name: "mindvision"
 exposure_ms: 8
 gamma: 0.6
 vid_pid: "f622:d13a"
 
-#####-----USB相机参数-----#####
 image_width: 640
 image_height: 360
 new_image_width: 1280
@@ -37,78 +176,21 @@ fov_v: 56.7
 new_fov_h: 67
 new_fov_v: 40.9
 usb_frame_rate: 100
-usb_exposure: 315 #1-80000______250
+usb_exposure: 315
 usb_gamma: 160
-usb_gain: 10 #0-96
+usb_gain: 10
 
-
-#####-----传统方法参数-----#####
-threshold: 150
-max_angle_error: 45 # degree
-min_lightbar_ratio: 1.5
-max_lightbar_ratio: 20
-min_lightbar_length: 8
-min_armor_ratio: 1
-max_armor_ratio: 5
-max_side_ratio: 1.5
-max_rectangular_error: 25 # degree
-min_confidence: 0.8
-
-#####-----cboard参数-----#####
+# 原 SP25 CBoard/CAN 参数。当前 HFUT 链路通过 rm_serial_driver 输出，
+# 一般不在这里调。
 quaternion_canid: 0x001
 bullet_speed_canid: 0x110
 send_canid: 0xff
 can_interface: "can0"
 
-#####-----tracker参数-----#####
-min_detect_count: 5
-max_temp_lost_count: 15
-outpost_max_temp_lost_count: 150
-
-#####-----aimer参数-----#####
-yaw_offset: 0 # degree -2.5
-pitch_offset: 1.5 # degree 2
-comming_angle: 70 # degree
-leaving_angle: 30 # degree
-min_spin_speed: 2 # rad/s
-decision_speed: 12 # rad/s
-high_speed_delay_time: 0.005 # s
-low_speed_delay_time: 0.005 # s
-
-#####-----planner MPC参数-----#####
-fire_thresh: 0.0035
-max_yaw_acc: 50
-Q_yaw: [9000000.0, 0]
-R_yaw: [1]
-max_pitch_acc: 100
-Q_pitch: [9000000.0, 0]
-R_pitch: [1]
-
-#####-----decider参数-----#####
+# 原 SP25 decider 参数，当前 aim_v2_node 主要由串口 mode 和 launch 参数控制。
 mode: 1
 
-#####-----shooter参数-----#####
-first_tolerance: 2 # 近距离射击容差，degree
-second_tolerance: 0.8 # 远距离射击容差，degree
-judge_distance: 0.5 #距离判断阈值
-auto_fire: true # 是否由自瞄控制射击
-
-#####-----工业相机标定参数-----#####
-R_gimbal2imubody: [1, 0, 0, 0, 1, 0, 0, 0, 1]
-
-# 重投影误差: 0.1032px
-camera_matrix: [2924.6190997571712, 0, 647.0245571651617, 0, 2927.4258594148396, 388.18625585771758, 0, 0, 1]
-distort_coeffs: [-0.58886594170687334, 0.32512251112647716, 0.012447953238733123, -0.0032411418907421475, 0]
-# 相机同理想情况的偏角: yaw0.02 pitch1.94 roll1.40 degree
-# 标定板到世界坐标系原点的水平距离: 4.12 m
-# 标定板同竖直摆放时的偏角: yaw-87.29 pitch7.65 roll-0.51 degree
-R_camera2gimbal: [0.00046423063676173171, 0.033770528223625203, 0.99942950522456209, -0.99970300483287733, 0.024367462669785803, -0.00035901413901253575, -0.02436568525675643, -0.99913251282626891, 0.03377181066266309]
-t_camera2gimbal: [-0.034955523715399906, -0.000074403211899371, 0.001248173910106823]
-
-
-#####-----buff_detector参数-----#####
+# buff 模型参数已保留，但 bringup_v2 当前主要跑自瞄，不是完整打符链路。
 model: "assets/yolo11_buff_int8.xml"
-
-#####-----buff_aimer参数-----#####
-fire_gap_time: 0.600   # s
-predict_time: 0.090     # s
+fire_gap_time: 0.600
+predict_time: 0.090

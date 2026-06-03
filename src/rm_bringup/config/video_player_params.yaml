@@ -1,16 +1,18 @@
 # ============================================================
-# 本地视频输入参数
+# 本地视频输入调参文件
 # ============================================================
+#
+# bringup_v2 会优先读取 config/video_player_params.yaml。
+# config/video_test/video_player_params.yaml 保留为默认/兼容版。
 #
 # 什么时候看这个文件：
 #   launch_params_decoupled.yaml 中：
-#     robot: video_test
 #     image_source: video
 #
 # 最常调：
-#   video_path  视频路径
-#   fps         按视频实际帧率或你想压测的帧率改
-#   camera_info_url  视频对应的相机内参
+#   video_path        视频路径
+#   fps               按视频实际帧率或压测需求修改
+#   camera_info_url   视频对应的相机内参
 #
 # 路径说明：
 #   相对路径按 ros2 launch 命令执行时的当前目录解析。
@@ -43,4 +45,4 @@ video_player:
     use_sensor_data_qos: true
 
     # 视频源对应的相机内参。PnP/解算依赖这个文件。
-    camera_info_url: "package://rm_bringup/config/video_test/camera_info.yaml"
+    camera_info_url: "package://rm_bringup/config/camera_info.yaml"

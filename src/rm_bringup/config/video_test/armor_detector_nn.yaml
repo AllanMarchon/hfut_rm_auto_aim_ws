@@ -1,3 +1,34 @@
+# ============================================================
+# 旧解耦链路的神经网络装甲板检测器参数
+# ============================================================
+#
+# 普通 SP25 aim_v2 调试一般不用看这个文件。
+#
+# 什么时候才需要看：
+#   launch_params_decoupled.yaml 中：
+#     detector_type: 'armor_detector_nn'
+#   并且启动的是旧解耦链路，例如：
+#     bringup_decoupled.launch.py
+#     bringup_pipeline.launch.py
+#
+# SP25 aim_v2 的检测器参数不在这里，而在：
+#   src/rm_auto_aim/aim_v2/config/aim_v2.yaml
+#
+# 这个文件常调项：
+#   backend.device              CPU / GPU
+#   backend.model_path          ONNX 模型路径
+#   preprocess.input_width      模型输入宽
+#   preprocess.input_height     模型输入高
+#   postprocess.conf_threshold  置信度阈值
+#   postprocess.nms_threshold   NMS 阈值
+#   pose.*                      PnP 和装甲板尺寸
+#
+# 不确定时不要改：
+#   output_names
+#   output_layout
+#   bbox_offset / class_offset / keypoint_offset
+#   keypoint_remap
+
 armor_detector:
   ros__parameters:
     debug: true

@@ -181,14 +181,14 @@ colcon build --packages-select <package_name> --symlink-install
 2. 使用 `ros2 topic info <topic>` 查看发布者和订阅者
 3. 使用 `ros2 node info <node>` 查看节点的话题连接
 
-### Q4: 与原 armor_solver 对比测试
+### Q4: 启动链路测试
 
-使用原架构：
+使用当前 `aim_v2` 主链路：
 ```bash
-ros2 launch rm_bringup bringup.launch.py
+ros2 launch rm_bringup bringup_v2.launch.py
 ```
 
-使用解耦架构：
+使用旧解耦测试链路：
 ```bash
 ros2 launch rm_bringup bringup_decoupled.launch.py
 ```

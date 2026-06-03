@@ -1,6 +1,6 @@
 # SP25 Migration Checkpoint
 
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 ## Goal
 
@@ -103,6 +103,30 @@ These changes are local and not committed yet.
 - Planner copied files had trailing whitespace mechanically cleaned.
 - Re-ran Python launch syntax and YAML checks on 2026-06-02; still passed.
 
+## Continued On 2026-06-03
+
+- Added environment/build documentation under `aim_v2`:
+  - `readme.md`: detailed environment setup, SP25 vs HFUT ROS2 differences, dependency notes, common build errors.
+  - `readme01.md`: simpler "make self-aim run" version; this is the one to give users first.
+- SP25 README reference path used for docs:
+  - `D:\HFUT苍穹战队视觉组\sp_vision_25-main\readme.md`
+- SP25 README says its normal build is plain CMake:
+  - `cmake -B build`
+  - `make -C build/ -j\`nproc\``
+- For HFUT `aim_v2`, do not use SP25 plain CMake flow directly; use ROS2/colcon:
+  - `source /opt/ros/humble/setup.bash`
+  - `source /opt/intel/openvino_2024.6.0/setupvars.sh`
+  - `export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake`
+  - `colcon build --symlink-install --packages-up-to aim_v2`
+- Important package-state note:
+  - `rm_bringup/package.xml` still declares `rm_rune`, but this workspace currently has no top-level `src/rm_rune`.
+  - If `rm_bringup` build fails because of `rm_rune`, first run `aim_v2` directly with `aim_v2.launch.py`; treat `rm_rune` as stale bringup dependency unless the missing package is restored.
+- Current untracked docs seen on 2026-06-03:
+  - `src/rm_auto_aim/aim_v2/6.02.md`
+  - `src/rm_auto_aim/aim_v2/readme.md`
+  - `src/rm_auto_aim/aim_v2/readme01.md`
+  - Do not blindly `git add .`; choose intentionally.
+
 ## Not Verified
 
 - Full ROS2/colcon build was not verified in this Windows PowerShell environment.
@@ -114,7 +138,9 @@ These changes are local and not committed yet.
 ## Important Next Steps
 
 1. Run on Ubuntu/ROS2:
-   - `colcon build --packages-select aim_v2 rm_bringup rm_serial_driver`
+   - first: `colcon build --symlink-install --packages-up-to aim_v2`
+   - then, if needed: `colcon build --symlink-install --packages-up-to rm_serial_driver`
+   - only after that try `rm_bringup`; watch for stale `rm_rune` dependency.
 2. If compile fails, first inspect:
    - `planner/tinympc` includes
    - Eigen include path
@@ -131,6 +157,9 @@ These changes are local and not committed yet.
 
 ## Files Most Relevant Next Time
 
+- `src/rm_auto_aim/aim_v2/SP25_MIGRATION_CHECKPOINT.md`
+- `src/rm_auto_aim/aim_v2/readme01.md`
+- `src/rm_auto_aim/aim_v2/readme.md`
 - `src/rm_auto_aim/aim_v2/src/aim_v2_node.cpp`
 - `src/rm_auto_aim/aim_v2/CMakeLists.txt`
 - `src/rm_auto_aim/aim_v2/config/aim_v2.yaml`
@@ -138,3 +167,13 @@ These changes are local and not committed yet.
 - `src/rm_bringup/launch/bringup_v2.launch.py`
 - `src/rm_hardware_driver/rm_serial_driver/src/protocol/infantry_protocol_32.cpp`
 - `src/rm_auto_aim/aim_v2/vendor/vision_core/tasks/auto_aim/planner`
+
+## Resume Protocol
+
+When continuing this work in a later session:
+
+1. Read this checkpoint first.
+2. Run `git status --short --branch`.
+3. Check whether the user wants documentation cleanup, build fixes, or more SP25 migration.
+4. If building is requested, prioritize Ubuntu/ROS2 `colcon build` errors over adding new SP25 modules.
+5. Keep HFUT hardware links; do not replace them with SP25 `CBoard`/camera main loop unless explicitly requested.

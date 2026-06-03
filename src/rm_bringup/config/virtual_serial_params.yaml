@@ -1,10 +1,12 @@
 # ============================================================
-# 虚拟下位机参数
+# 虚拟下位机调参文件
 # ============================================================
+#
+# bringup_v2 会优先读取 config/virtual_serial_params.yaml。
+# config/video_test/virtual_serial_params.yaml 保留为默认/兼容版。
 #
 # 什么时候看这个文件：
 #   launch_params_decoupled.yaml 中：
-#     robot: video_test
 #     virtual_serial: true
 #
 # 这个节点模拟下位机反馈，发布：

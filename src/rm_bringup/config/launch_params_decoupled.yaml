@@ -1,64 +1,109 @@
-# ========================================
-# 解耦架构集成测试启动参数配置
-# ========================================
+# ============================================================
+# 启动总入口：bringup_v2 / 解耦链路
+# ============================================================
+#
+# 普通离线调试优先看这个文件。
+#
+# bringup_v2 会读取：
+#   1. 本文件：选择机器人、图像源、串口模式、aim_v2 默认参数
+#   2. config/*_params.yaml：日常调参文件，例如视频源、虚拟下位机
+#   3. config/<robot>/*_params.yaml：默认/车种配置，根目录没有同名文件时作为 fallback
+#
+# 常用启动：
+#   ros2 launch rm_bringup bringup_v2.launch.py
+#
+# 命令行参数仍然可以覆盖这里的默认值，例如：
+#   ros2 launch rm_bringup bringup_v2.launch.py image_source:=video virtual_serial:=true
 
-# --------- 通用参数 ---------
-# 机器人配置标签，用于选择 rm_bringup/config/<robot>/ 下的真实参数
-robot: 'video_test'  # 可选: 'video_test', 'wheel_6mm', 'leg_6mm', 'hero', 'sentinel'
 
-# 命名空间 所有节点、话题都会以这个命名空间开头
+# ============================================================
+# 1. 最常调：运行模式选择
+# ============================================================
+
+# 参数组。根目录没有同名调参文件时，会 fallback 到 src/rm_bringup/config/<robot>/。
+# 离线视频调试推荐 video_test。
+# 实车按车型选择 infantry_4_1 / hero / leg / uav。
+robot: 'video_test'
+
+# ROS 命名空间。单车调试保持为空即可。
 namespace: ''
 
-# image_source: (video | mindvision | hik)
+# 图像输入源：
+#   video      本地视频文件，调视频路径看 config/video_player_params.yaml
+#   mindvision MindVision 相机
+#   hik        海康相机
 image_source: 'video'
 
-# true: 虚拟下位机 false: 实车
+# 串口来源：
+#   true  使用虚拟下位机，调姿态/模式看 config/virtual_serial_params.yaml
+#   false 使用真实串口，调串口号/协议看 config/<robot>/serial_driver_params.yaml
 virtual_serial: true
 
-# true: 开启调试模式 (发布可视化markers)
-debug: true
 
-# enable_auto_buff: (true | false) 是否开启打符链路
+# ============================================================
+# 2. aim_v2 自瞄核心默认参数
+# ============================================================
+# 这一段只给 bringup_v2.launch.py 里的 aim_v2_node 使用。
+# 注意：下面的 detector_type 是 aim_v2 自己的 yolo/traditional，
+# 不要和后面旧解耦链路的 armor_detector/armor_detector_nn 混淆。
+
+aim_v2:
+  # true: 只有串口 mode 属于自瞄模式时才输出云台指令。
+  respect_mode: true
+
+  # true: 没收到 /serial/receive 前不解算，只发布空指令。
+  # 离线调试时配合 virtual_serial=true 使用。
+  require_serial: true
+
+  # 离线和第一次上车检查必须 false。
+  enable_fire: false
+
+  # aimer: 简单直接，建议先用它跑通链路。
+  # planner: SP25 Planner/TinyMPC 路径，链路稳定后再切。
+  control_backend: 'aimer'
+
+  # yolo: 使用 SP25 YOLO/OpenVINO 检测器。
+  # traditional: 使用 SP25 传统灯条检测器。
+  detector_type: 'yolo'
+
+  # false 更容易排查；基础链路稳定后再尝试 true。
+  async_inference: false
+
+  # 空字符串表示根据串口 mode 自动推导敌方颜色。
+  # 需要强制时填 'red' 或 'blue'。
+  enemy_color: ''
+  derive_enemy_color_from_mode: true
+
+
+# ============================================================
+# 3. 旧解耦链路参数，一般调 aim_v2 时不用动
+# ============================================================
+# 这些主要给 bringup_decoupled.launch.py / bringup_pipeline.launch.py 使用。
+
+debug: true
 enable_auto_buff: false
 
-# detector_type: (armor_detector | armor_detector_nn)
-# armor_detector:    使用传统 OpenCV 灯条检测器
-# armor_detector_nn: 使用神经网络检测器
+# 旧解耦链路检测器：
+#   armor_detector     传统 OpenCV 灯条检测器
+#   armor_detector_nn  旧神经网络检测器，普通 aim_v2 调参不用动
 detector_type: 'armor_detector'
 
-# use_camera_detector_container: (true | false)
-# true:  相机节点和检测节点放在同一 ComposableNodeContainer 中 (intra-process 零拷贝)
-# false: 相机节点和检测节点分别作为独立节点运行
+# true: 相机和检测器放进同一个组件容器。
+# false: 相机和检测器分别作为独立节点运行，更容易排查。
 use_camera_detector_container: false
 
-# tracker_impl: (cpp | python)
-# cpp:    使用 C++ 组件节点 (rclcpp_components)
-# python: 使用 Python 独立节点
+# cpp / python。只影响旧 max_entropy_tracker 测试链路。
 tracker_impl: 'cpp'
 
-# --------- 相机/URDF参数 ---------
-# 舵轮 6mm 相机相对于里程计的位姿 (相机安装位置)
+
+# ============================================================
+# 4. 旧解耦链路的相机位姿和启动延迟，一般不用动
+# ============================================================
+
 odom2camera:
   xyz: "\"0.151 0.00  0.040\""
   rpy: "\"0.0  0.0  0.000\""
 
-# 腿 6mm 相机相对于里程计的位姿 (相机安装位置)
-# odom2camera:
-#   xyz: "\"0.12514 0.000 0.0505 \""
-#   rpy: "\"0.0  0.0  -0.00\""
-
-# # 英雄
-# odom2camera:
-#   xyz: "\"0.174275 0.000 0.086463 \""
-#   rpy: "\"0.0  0.1396  -0.00\""
-
-# # 哨兵
-# odom2camera:
-#   xyz: "\"0.174275 0.000 0.086463 \""
-#   rpy: "\"0.0  0.1396  -0.00\""
-
-# --------- 节点启动延迟 (秒) ---------
-# 用于控制节点启动顺序，确保依赖关系正确
 delays:
   serial: 1.5
   camera_detector: 2.0
@@ -67,16 +112,3 @@ delays:
   robot_pose_estimator: 3.0
   target_selector: 3.5
   trajectory_planner: 4.0
-
-# --------- 解耦架构数据流 ---------
-# armor_detector/armors
-#       ↓
-# armor_tracker/tracked_armors
-#       ↓
-# robot_pose_estimator/robots + robot_pose_estimator/virtual_armors
-#       ↓
-# target_selector/selected_target
-#       ↓
-# trajectory_planner/gimbal_cmd
-#       ↑
-# ballistic_solver (服务)

@@ -229,7 +229,7 @@ def generate_test_report():
     print("   $ colcon build --symlink-install --packages-select models basic_models combined_models")
     print("\n   运行测试:")
     print("   $ source install/setup.bash")
-    print("   $ ros2 launch rm_bringup bringup.launch.py")
+    print("   $ ros2 launch rm_bringup bringup_v2.launch.py")
 
 if __name__ == "__main__":
     # 设置随机种子以保证可重复性

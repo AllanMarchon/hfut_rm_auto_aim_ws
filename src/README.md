@@ -121,7 +121,7 @@ rosdep install --from-paths src --ignore-src -r -y
 
 ## 三、编译与运行
 
-修改rm_bringup/config/launch_params.yaml，选择需要启动的功能
+修改 `rm_bringup/config/launch_params_decoupled.yaml`，选择需要启动的功能
 
 ```bash
 # 编译
@@ -129,7 +129,7 @@ colcon build --symlink-install --parallel-workers 4 #本仓库包含的功能包
 # 运行
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 launch rm_bringup bringup.launch.py
+ros2 launch rm_bringup bringup_v2.launch.py
 ```
 
 默认日志和内录视频路径为`~/fyt2024-log/`

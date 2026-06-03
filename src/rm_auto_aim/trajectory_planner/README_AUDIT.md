@@ -87,8 +87,8 @@ trajectory_planner:
 ### 2. 运行节点
 
 ```bash
-# 启动trajectory_planner节点
-ros2 launch rm_bringup bringup.launch.py
+# 启动包含 trajectory_planner 的旧解耦测试链路
+ros2 launch rm_bringup bringup_decoupled.launch.py
 
 # 或单独运行
 ros2 run trajectory_planner trajectory_planner_node --ros-args --params-file config/trajectory_planner.yaml

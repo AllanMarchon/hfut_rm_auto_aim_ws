@@ -13,7 +13,7 @@
 
 ### 2.0 扩展卡尔曼滤波
 
-见armor_solver/src/armor_solver_node.cpp
+当前 v2 主链路不再使用旧 `armor_solver`。如需参考滤波器用法，请查看 `rm_utils/math/extended_kalman_filter.hpp` 及相关调用处。
 
 ### 2.1 PnP解算
 
@@ -93,7 +93,7 @@ FYT_WARN("test_logger", "a = {}", a);
 
 namespace fs = std::filesystem;
 fs::path model_path =
-  utils::URLResolver::getResolvedPath("package://armor_detector/model/lenet.onnx");
+  utils::URLResolver::getResolvedPath("package://aim_v2/assets/yolov5.xml");
 
 if (fs::exists(model_path)) {
     std::cout<<model_path.string()<<std::endl;

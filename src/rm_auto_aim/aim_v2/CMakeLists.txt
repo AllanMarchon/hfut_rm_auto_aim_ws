@@ -76,6 +76,7 @@ ament_target_dependencies(aim_v2_node
   ament_index_cpp
   rclcpp
   rm_interfaces
+  rm_utils
   sensor_msgs
   std_msgs
   cv_bridge

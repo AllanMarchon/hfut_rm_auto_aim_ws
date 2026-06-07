@@ -334,27 +334,15 @@ sudo apt install -y libceres-dev
 
 这通常来自 `rm_utils`，不是 `aim_v2` 本体。
 
-### 10.3 找不到 rm_rune
+### 10.3 rm_bringup 编译范围
 
-当前仓库里没有顶层 `src/rm_rune`，但 `src/rm_bringup/package.xml` 仍声明：
+当前 v2 分支只保留 SP `aim_v2` 主链路。`rm_bringup/package.xml` 不再声明旧 `rm_auto_aim` 聚合包或 `rm_rune` 依赖。
 
-```xml
-<depend>rm_rune</depend>
-```
-
-如果编译 `rm_bringup` 时报 `rm_rune` 缺失，这不是系统环境问题，而是包声明和当前仓库内容不一致。
-
-临时验证 `aim_v2` 时可以先跳过 `rm_bringup`，直接：
+常用编译：
 
 ```bash
-colcon build --symlink-install --packages-up-to aim_v2
-ros2 launch aim_v2 aim_v2.launch.py enable_fire:=false
+colcon build --symlink-install --packages-up-to rm_bringup
 ```
-
-如果必须使用 `bringup_v2.launch.py`，需要二选一：
-
-- 把实际的 `rm_rune` 包补回工作空间。
-- 确认不用旧打符链路后，移除 `rm_bringup/package.xml` 里的陈旧 `rm_rune` 依赖。
 
 ### 10.4 找不到 cv_bridge
 
@@ -438,4 +426,3 @@ ros2 topic echo /armor_solver/cmd_gimbal --once
 - 没接实体串口时使用 `virtual_serial:=true`。
 - Planner 不稳定时先用 `control_backend:=aimer`。
 - OpenVINO 异步路径不稳定时先用 `async_inference:=false`。
-

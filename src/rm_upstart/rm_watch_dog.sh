@@ -1,46 +1,61 @@
 #!/bin/bash
-# watch_dog.sh - ROS2 watchdog for HFUT RM Auto Aim Project
-# Optimized: clean SHM, disable FastDDS SHM, restart on heartbeat loss
-
-echo "[WATCHDOG] START DOMAIN=$ROS_DOMAIN_ID"
+# ROS 2 watchdog for the v2 SP bringup.
+# Default mode is local video + virtual serial.
 
 # ===========================
 # Configurable parameters
 # ===========================
-TIMEOUT=10                  # 心跳检测间隔（秒）
-NAMESPACE=""                # ROS2 命名空间，例如 "/infantry_3"
-NODE_NAMES=("armor_detector" "serial_driver" "gimbal_pipeline")  # 监控节点列表，用空格分隔
+TIMEOUT="${TIMEOUT:-10}"
+NAMESPACE="${NAMESPACE:-}"
+IMAGE_SOURCE="${IMAGE_SOURCE:-video}"
+VIRTUAL_SERIAL="${VIRTUAL_SERIAL:-true}"
+
+SERIAL_NODE="serial_driver"
+if [[ "$VIRTUAL_SERIAL" == "true" ]]; then
+    SERIAL_NODE="virtual_serial"
+fi
+
+if [[ -n "${WATCHDOG_NODES:-}" ]]; then
+    read -r -a NODE_NAMES <<< "$WATCHDOG_NODES"
+else
+    NODE_NAMES=("$SERIAL_NODE" "gimbal_pipeline")
+    if [[ "$IMAGE_SOURCE" == "video" ]]; then
+        NODE_NAMES=("video_player" "${NODE_NAMES[@]}")
+    fi
+fi
+
 USER="$(whoami)"
-HOME_DIR=$(eval echo ~$USER)
-WORKING_DIR="$HOME_DIR/hfut_rm_auto_aim_ws/"  # 代码目录
-LAUNCH_FILE="rm_bringup bringup_pipeline.launch.py"  # ROS2 launch 文件
-OUTPUT_FILE="$WORKING_DIR/screen.output"  # 启动日志
+HOME_DIR=$(eval echo "~$USER")
+WORKING_DIR="${WORKING_DIR:-$HOME_DIR/hfut_rm_auto_aim_ws/}"
+OUTPUT_FILE="${OUTPUT_FILE:-$WORKING_DIR/screen.output}"
 
 # ===========================
-# ROS2 / RMW 环境
+# ROS 2 / RMW environment
 # ===========================
-rmw="rmw_fastrtps_cpp"          # RMW 实现，可改为 rmw_cyclonedds_cpp
+rmw="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 export RMW_IMPLEMENTATION="$rmw"
-export FASTDDS_SHM_DISABLE=1     # 禁用 FastDDS SHM 避免锁死问题
-export ROS_DOMAIN_ID=10
-
+export FASTDDS_SHM_DISABLE=1
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-10}"
 export ROS_HOSTNAME=$(hostname)
-export ROS_HOME=${ROS_HOME:=$HOME_DIR/.ros}
-export ROS_LOG_DIR="/tmp"
+export ROS_HOME="${ROS_HOME:-$HOME_DIR/.ros}"
+export ROS_LOG_DIR="${ROS_LOG_DIR:-/tmp}"
 
 source /opt/ros/humble/setup.bash
-source $WORKING_DIR/install/setup.bash
+source "$WORKING_DIR/install/setup.bash"
 
-# 可选 RMW 配置文件
 rmw_config=""
-if [[ "$rmw" == "rmw_fastrtps_cpp" && ! -z "$rmw_config" ]]; then
+if [[ "$rmw" == "rmw_fastrtps_cpp" && -n "$rmw_config" ]]; then
     export FASTRTPS_DEFAULT_PROFILES_FILE=$rmw_config
-elif [[ "$rmw" == "rmw_cyclonedds_cpp" && ! -z "$rmw_config" ]]; then
+elif [[ "$rmw" == "rmw_cyclonedds_cpp" && -n "$rmw_config" ]]; then
     export CYCLONEDDS_URI=$rmw_config
 fi
 
+echo "[WATCHDOG] START DOMAIN=$ROS_DOMAIN_ID"
+echo "[WATCHDOG] IMAGE_SOURCE=$IMAGE_SOURCE VIRTUAL_SERIAL=$VIRTUAL_SERIAL"
+echo "[WATCHDOG] NODES=${NODE_NAMES[*]}"
+
 # ===========================
-# SHM Cleanup function
+# SHM cleanup
 # ===========================
 function cleanup_shm() {
     echo "[WATCHDOG] Cleaning FastDDS SHM..."
@@ -50,47 +65,39 @@ function cleanup_shm() {
 }
 
 # ===========================
-# Bringup function
+# Bringup
 # ===========================
 function bringup() {
     echo "[WATCHDOG] Bringing up ROS2..."
     echo "[WATCHDOG] ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
-    
-    # Source ROS2 and project environment
+
     source /opt/ros/humble/setup.bash
-    source $WORKING_DIR/install/setup.bash
-    # source /home/hfut-nuc/next_navigator/env.zsh
-    # source /opt/intel/oneapi/setvars.sh
-    source /opt/MVS/bin/set_env_path.sh
+    source "$WORKING_DIR/install/setup.bash"
+    if [[ -f /opt/MVS/bin/set_env_path.sh ]]; then
+        source /opt/MVS/bin/set_env_path.sh
+    fi
 
-    cleanup_shm   # 启动前再清一次 SHM（保险）
+    cd "$WORKING_DIR" || {
+        echo "[WATCHDOG] Failed to enter WORKING_DIR=$WORKING_DIR"
+        exit 1
+    }
 
-    # USB 相机权限设置
-    # USB_LINE=$(lsusb | grep "Hikrobot MV-CS016-10UC" | head -1)
-    # if [ ! -z "$USB_LINE" ]; then
-    #     echo "找到Hikrobot相机设备: $USB_LINE"
-    #     BUS_NUM=$(echo "$USB_LINE" | sed -E 's/Bus ([0-9]+) Device ([0-9]+):.*/\1/')
-    #     DEV_NUM=$(echo "$USB_LINE" | sed -E 's/Bus ([0-9]+) Device ([0-9]+):.*/\2/')
-    #     BUS_NUM=$(printf "%03d" $BUS_NUM)
-    #     DEV_NUM=$(printf "%03d" $DEV_NUM)
-    #     USB_DEVICE="/dev/bus/usb/$BUS_NUM/$DEV_NUM"
-    #     echo "设置USB设备权限: $USB_DEVICE"
-    #     chmod 666 "$USB_DEVICE"
-    # else
-    #     echo "警告: 未找到Hikrobot MV-CS016-10UC相机设备"
-    # fi
+    cleanup_shm
 
-    nohup ros2 launch $LAUNCH_FILE > "$OUTPUT_FILE" 2>&1 &
+    nohup ros2 launch rm_bringup bringup_v2.launch.py \
+        "image_source:=$IMAGE_SOURCE" \
+        "virtual_serial:=$VIRTUAL_SERIAL" \
+        > "$OUTPUT_FILE" 2>&1 &
+
     echo "[WATCHDOG] ROS2 launched, logging to $OUTPUT_FILE"
 }
 
 # ===========================
-# Restart function
+# Restart
 # ===========================
 function restart() {
     echo "[WATCHDOG] Restarting ROS2 nodes..."
 
-    # 杀干净 ROS2 / DDS 相关进程
     pkill -f ros2
     pkill -f component_container
     pkill -f rmw
@@ -99,7 +106,6 @@ function restart() {
 
     cleanup_shm
 
-    # 重启 ROS2 daemon
     ros2 daemon stop
     sleep 1
     ros2 daemon start
@@ -111,8 +117,8 @@ function restart() {
 # Initial bringup
 # ===========================
 bringup
-sleep $TIMEOUT
-sleep $TIMEOUT  # 给节点稳定时间
+sleep "$TIMEOUT"
+sleep "$TIMEOUT"
 
 # ===========================
 # Heartbeat monitoring loop
@@ -121,11 +127,11 @@ while true; do
     for node in "${NODE_NAMES[@]}"; do
         topic="$NAMESPACE/$node/heartbeat"
         echo "[WATCHDOG] Checking $node heartbeat..."
-        
-        if ros2 topic list 2>/dev/null | grep -q $topic 2>/dev/null; then
-            data_value=$(timeout 10 ros2 topic echo $topic --once | grep -o "data: [0-9]*" | awk '{print $2}' 2>/dev/null)
-            if [ ! -z "$data_value" ]; then
-                echo "    $node is OK! Heartbeat Count: $data_value"
+
+        if ros2 topic list 2>/dev/null | grep -qx "$topic" 2>/dev/null; then
+            data_value=$(timeout 10 ros2 topic echo "$topic" --once | grep -o "data: [0-9]*" | awk '{print $2}' 2>/dev/null)
+            if [[ -n "$data_value" ]]; then
+                echo "    $node is OK. Heartbeat Count: $data_value"
             else
                 echo "    Heartbeat lost for $topic, restarting all nodes..."
                 restart
@@ -137,5 +143,5 @@ while true; do
             break
         fi
     done
-    sleep $TIMEOUT
+    sleep "$TIMEOUT"
 done

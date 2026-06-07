@@ -1,6 +1,6 @@
 # TrajectoryPlan.action
 # Action for trajectory planning control
-# Used by target_selector to control trajectory_planner
+# Kept for compatibility with higher-level planning tools.
 
 # Goal - Request trajectory planning for a target robot
 string robot_id              # Target robot ID to track and plan trajectory for

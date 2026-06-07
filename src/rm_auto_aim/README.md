@@ -1,23 +1,17 @@
 # rm_auto_aim
 
-FYT视觉24赛季装甲板识别与跟踪算法ROS2功能包
+当前 v2 分支只保留 `aim_v2`。
 
-**主要参考**: [rm_vision](https://gitlab.com/rm_vision)
+`aim_v2` 是 SP 自瞄核心接入 HFUT ROS2 硬件链路后的包：
 
-## 维护者及开源许可证
-
-Maintainer : Chengfu Zou,  chengfuzou@outlook.com
-
+```text
+camera/video -> /image_raw
+serial/virtual_serial -> /serial/receive
+aim_v2_node -> /armor_solver/cmd_gimbal
 ```
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+启动入口在：
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+```text
+src/rm_bringup/launch/bringup_v2.launch.py
 ```

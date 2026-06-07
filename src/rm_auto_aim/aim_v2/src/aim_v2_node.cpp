@@ -4,6 +4,7 @@
 #include <rm_interfaces/msg/gimbal_cmd.hpp>
 #include <rm_interfaces/msg/serial_receive_data.hpp>
 #include <rm_interfaces/srv/set_mode.hpp>
+#include <rm_utils/heartbeat.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <yaml-cpp/yaml.h>
@@ -161,6 +162,8 @@ public:
         response->success = true;
         response->message = "aim_v2 mode updated";
       });
+
+    heartbeat_ = fyt::HeartBeatPublisher::create(this);
 
     if (async_inference_) {
       async_running_.store(true);
@@ -591,6 +594,7 @@ private:
   rclcpp::Subscription<rm_interfaces::msg::SerialReceiveData>::SharedPtr serial_sub_;
   rclcpp::Publisher<rm_interfaces::msg::GimbalCmd>::SharedPtr cmd_pub_;
   rclcpp::Service<rm_interfaces::srv::SetMode>::SharedPtr set_mode_srv_;
+  fyt::HeartBeatPublisher::SharedPtr heartbeat_;
 };
 
 }  // namespace aim_v2

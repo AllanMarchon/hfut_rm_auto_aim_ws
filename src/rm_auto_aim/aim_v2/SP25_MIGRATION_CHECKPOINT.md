@@ -119,8 +119,8 @@ These changes are local and not committed yet.
   - `export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake`
   - `colcon build --symlink-install --packages-up-to aim_v2`
 - Important package-state note:
-  - `rm_bringup/package.xml` still declares `rm_rune`, but this workspace currently has no top-level `src/rm_rune`.
-  - If `rm_bringup` build fails because of `rm_rune`, first run `aim_v2` directly with `aim_v2.launch.py`; treat `rm_rune` as stale bringup dependency unless the missing package is restored.
+  - Current v2 keeps only the SP `aim_v2` main chain.
+  - `rm_bringup/package.xml` no longer declares the old `rm_auto_aim` aggregate package or `rm_rune`.
 - Current untracked docs seen on 2026-06-03:
   - `src/rm_auto_aim/aim_v2/6.02.md`
   - `src/rm_auto_aim/aim_v2/readme.md`
@@ -140,7 +140,7 @@ These changes are local and not committed yet.
 1. Run on Ubuntu/ROS2:
    - first: `colcon build --symlink-install --packages-up-to aim_v2`
    - then, if needed: `colcon build --symlink-install --packages-up-to rm_serial_driver`
-   - only after that try `rm_bringup`; watch for stale `rm_rune` dependency.
+   - then build `rm_bringup` for the camera/video + serial + aim_v2 launch chain.
 2. If compile fails, first inspect:
    - `planner/tinympc` includes
    - Eigen include path

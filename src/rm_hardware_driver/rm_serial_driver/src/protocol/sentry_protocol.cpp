@@ -50,38 +50,6 @@ void ProtocolSentry::send(const rm_interfaces::msg::GimbalCmd &data) {
 }
 
 
-void ProtocolSentry::send(const rm_interfaces::msg::Blind &data) {
-  if (data.is_left && data.yaw>0){
-    try{
-      packet.loadData<int>(static_cast<int>(std::stoi(data.number.substr(0,1))), 18);
-      packet.loadData<float>(static_cast<float>(data.yaw),22);
-    }
-    catch(const std::invalid_argument &e){
-      FYT_ERROR("serial_driver","left_blind_invalid_argument");
-      packet.loadData<int>(static_cast<int>(-1), 18);
-    }
-  }
-  else if (data.is_left){
-    packet.loadData<int>(static_cast<int>(-1), 18);
-  }
-  if (!data.is_left && data.yaw<0)
-  {
-    try{
-      packet.loadData<int>(static_cast<int>(std::stoi(data.number.substr(0,1))), 26);
-      packet.loadData<float>(static_cast<float>(data.yaw),30);
-    }
-    catch(const std::invalid_argument &e){
-      FYT_ERROR("serial_driver","right_blind_invalid_argument");
-      packet.loadData<int>(static_cast<int>(-1), 26);
-    }
-  }
-  else if (!data.is_left){
-    packet.loadData<int>(static_cast<int>(-1), 26);
-  }
-  
-  packet_tool_->sendPacket(packet);
-}
-
 void ProtocolSentry::send(const geometry_msgs::msg::Twist &data) {
   // packet_.loadData<unsigned char>(0x00, 1);
   // is_spin
@@ -175,16 +143,6 @@ std::vector<rclcpp::SubscriptionBase::SharedPtr> ProtocolSentry::getSubscription
     "/cmd_vel_chassis",
     rclcpp::SensorDataQoS(),
     [this](const geometry_msgs::msg::Twist::SharedPtr msg) { this->send(*msg); });
-  /*auto sub2 = node->create_subscription<rm_interfaces::msg::Blind>(
-    "blind_detector/left/blind",
-    rclcpp::SensorDataQoS(),
-    [this](const rm_interfaces::msg::Blind::SharedPtr msg){ this->send(*msg); });
-
-  auto sub4 = node->create_subscription<rm_interfaces::msg::Blind>(
-    "blind_detector/right/blind",
-    rclcpp::SensorDataQoS(),
-    [this](const rm_interfaces::msg::Blind::SharedPtr msg){ this->send(*msg); });*/
-    
   //自身与狗洞夹角
   auto sub5 = node->create_subscription<std_msgs::msg::Float64>(
     "/dogHole_angle_difference",
@@ -205,26 +163,15 @@ std::vector<rclcpp::SubscriptionBase::SharedPtr> ProtocolSentry::getSubscription
     "/if_attack_outpost",
     rclcpp::SensorDataQoS(),
     [this](const std_msgs::msg::Bool::SharedPtr msg) { this->send1(*msg); });
-  //return {sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8};
   return {sub1, sub3, sub5, sub6, sub7, sub8};
-  //return {sub1, sub3, sub5, sub6, sub7, sub8};
   //////////////////  added and change here //////////////////////
 }
 
 std::vector<rclcpp::Client<rm_interfaces::srv::SetMode>::SharedPtr> ProtocolSentry::getClients(
   rclcpp::Node::SharedPtr node) const {
-  auto client1 = node->create_client<rm_interfaces::srv::SetMode>("armor_detector/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  auto client2 = node->create_client<rm_interfaces::srv::SetMode>("gimbal_pipeline/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  auto client_buff_det = node->create_client<rm_interfaces::srv::SetMode>(
-    "buff_detector/set_mode", rmw_qos_profile_services_default);
-  auto client_buff_pose = node->create_client<rm_interfaces::srv::SetMode>(
-    "buff_pose_estimator/set_mode", rmw_qos_profile_services_default);
-  auto client3 = node->create_client<rm_interfaces::srv::SetMode>("left/blind_detector/set_mode", rmw_qos_profile_services_default);  //补盲
-  //auto client4 = node->create_client<rm_interfaces::srv::SetMode>("right/blind_detector/set_mode", rmw_qos_profile_services_default);  //补盲
-  //return {client1, client2};
-  return {client1, client2, client_buff_det, client_buff_pose};  //补盲
+  auto client = node->create_client<rm_interfaces::srv::SetMode>("gimbal_pipeline/set_mode",
+                                                                 rmw_qos_profile_services_default);
+  return {client};
 }
 
 }  // namespace fyt::serial_driver::protocol

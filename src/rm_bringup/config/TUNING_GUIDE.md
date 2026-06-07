@@ -1,6 +1,6 @@
 # 调参文件说明
 
-`bringup_v2` 日常调参入口现在直接放在 `src/rm_bringup/config/` 下。
+当前 v2 分支只保留 SP `aim_v2` 主链路。日常调参入口直接放在 `src/rm_bringup/config/` 下。
 
 优先看这几个文件：
 
@@ -12,6 +12,12 @@ src/rm_bringup/config/camera_info.yaml
 src/rm_auto_aim/aim_v2/config/aim_v2.yaml
 ```
 
-`config/video_test/` 目录继续保留默认/兼容版。`bringup_v2` 读取节点参数时会先找 `config/*_params.yaml`，找不到再回退到 `config/<robot>/*_params.yaml`，最后回退到 `config/uav/*_params.yaml`。
+启动：
+
+```bash
+ros2 launch rm_bringup bringup_v2.launch.py
+```
+
+`config/<robot>/` 目录只保留相机、串口、视频和内参等硬件输入配置，作为根目录没有同名参数文件时的 fallback。
 
 更完整的说明见同目录的 `调参文档.md`。

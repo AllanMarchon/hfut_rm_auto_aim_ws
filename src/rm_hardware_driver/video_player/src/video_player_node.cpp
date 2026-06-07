@@ -10,6 +10,7 @@
 #include <image_transport/image_transport.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rm_utils/heartbeat.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
@@ -112,6 +113,8 @@ public:
       camera_info_msg_.distortion_model = "plumb_bob";
       camera_info_msg_.d = {0.0, 0.0, 0.0, 0.0, 0.0};
     }
+
+    heartbeat_ = fyt::HeartBeatPublisher::create(this);
 
     // Start capture thread
     capture_thread_ = std::thread{[this]() -> void {
@@ -229,6 +232,7 @@ private:
 
   // Capture thread
   std::thread capture_thread_;
+  fyt::HeartBeatPublisher::SharedPtr heartbeat_;
 };
 
 }  // namespace video_player

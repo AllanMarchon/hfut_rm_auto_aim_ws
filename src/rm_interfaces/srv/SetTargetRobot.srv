@@ -1,6 +1,6 @@
 # SetTargetRobot.srv
-# Service for setting the target robot ID for trajectory planner
-# Called by target_selector to tell trajectory_planner which robot to track
+# Service for setting the target robot ID.
+# Kept for compatibility with higher-level planning tools.
 
 # Request
 string robot_id              # Target robot ID to track ("1"~"5", "outpost", "base", or "" to clear)

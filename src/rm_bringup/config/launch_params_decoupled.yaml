@@ -1,29 +1,26 @@
 # ============================================================
-# 启动总入口：bringup_v2 / 解耦链路
+# SP aim_v2 启动总入口
 # ============================================================
 #
-# 普通离线调试优先看这个文件。
-#
-# bringup_v2 会读取：
-#   1. 本文件：选择机器人、图像源、串口模式、aim_v2 默认参数
-#   2. config/*_params.yaml：日常调参文件，例如视频源、虚拟下位机
-#   3. config/<robot>/*_params.yaml：默认/车种配置，根目录没有同名文件时作为 fallback
+# 当前 v2 分支只保留 SP aim_v2 主链路：
+#   video/camera -> /image_raw
+#   virtual_serial/real_serial -> /serial/receive
+#   aim_v2_node -> /armor_solver/cmd_gimbal
 #
 # 常用启动：
 #   ros2 launch rm_bringup bringup_v2.launch.py
 #
-# 命令行参数仍然可以覆盖这里的默认值，例如：
+# 命令行参数可以覆盖这里的默认值，例如：
 #   ros2 launch rm_bringup bringup_v2.launch.py image_source:=video virtual_serial:=true
 
 
 # ============================================================
-# 1. 最常调：运行模式选择
+# 1. 运行模式
 # ============================================================
 
-# 参数组。根目录没有同名调参文件时，会 fallback 到 src/rm_bringup/config/<robot>/。
-# 离线视频调试推荐 video_test。
-# 实车按车型选择 infantry_4_1 / hero / leg / uav。
-robot: 'video_test'
+# 车种配置。只在根目录没有同名 *_params.yaml 时作为 fallback 使用。
+# 离线视频调试通常不用改；实车按车型选择 infantry_4_1 / hero / leg / uav。
+robot: 'uav'
 
 # ROS 命名空间。单车调试保持为空即可。
 namespace: ''
@@ -43,9 +40,6 @@ virtual_serial: true
 # ============================================================
 # 2. aim_v2 自瞄核心默认参数
 # ============================================================
-# 这一段只给 bringup_v2.launch.py 里的 aim_v2_node 使用。
-# 注意：下面的 detector_type 是 aim_v2 自己的 yolo/traditional，
-# 不要和后面旧解耦链路的 armor_detector/armor_detector_nn 混淆。
 
 aim_v2:
   # true: 只有串口 mode 属于自瞄模式时才输出云台指令。
@@ -73,42 +67,3 @@ aim_v2:
   # 需要强制时填 'red' 或 'blue'。
   enemy_color: ''
   derive_enemy_color_from_mode: true
-
-
-# ============================================================
-# 3. 旧解耦链路参数，一般调 aim_v2 时不用动
-# ============================================================
-# 这些主要给 bringup_decoupled.launch.py / bringup_pipeline.launch.py 使用。
-
-debug: true
-enable_auto_buff: false
-
-# 旧解耦链路检测器：
-#   armor_detector     传统 OpenCV 灯条检测器
-#   armor_detector_nn  旧神经网络检测器，普通 aim_v2 调参不用动
-detector_type: 'armor_detector'
-
-# true: 相机和检测器放进同一个组件容器。
-# false: 相机和检测器分别作为独立节点运行，更容易排查。
-use_camera_detector_container: false
-
-# cpp / python。只影响旧 max_entropy_tracker 测试链路。
-tracker_impl: 'cpp'
-
-
-# ============================================================
-# 4. 旧解耦链路的相机位姿和启动延迟，一般不用动
-# ============================================================
-
-odom2camera:
-  xyz: "\"0.151 0.00  0.040\""
-  rpy: "\"0.0  0.0  0.000\""
-
-delays:
-  serial: 1.5
-  camera_detector: 2.0
-  ballistic_solver: 2.0
-  armor_tracker: 2.5
-  robot_pose_estimator: 3.0
-  target_selector: 3.5
-  trajectory_planner: 4.0

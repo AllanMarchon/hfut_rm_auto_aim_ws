@@ -47,8 +47,6 @@ public:
 
     this->declare_parameter("vision_mode", static_cast<int>(0));
 
-    has_rune_ = false;
-
     serial_receive_data_msg_.header.frame_id = "odom";
     serial_receive_data_msg_.bullet_speed = 25.0;
     transform_stamped_.header.frame_id = "odom";
@@ -61,27 +59,11 @@ public:
     // Heartbeat
     heartbeat_ = HeartBeatPublisher::create(this);
 
-    // Param client
-    auto autoaim_set_mode_client_1 =
-      this->create_client<rm_interfaces::srv::SetMode>("armor_detector/set_mode");
-    set_mode_clients_.emplace(autoaim_set_mode_client_1->get_service_name(),
-                              autoaim_set_mode_client_1);
-    auto autoaim_set_mode_client_2 =
+    // aim_v2 is launched with node name "gimbal_pipeline" for SetMode compatibility.
+    auto autoaim_set_mode_client =
       this->create_client<rm_interfaces::srv::SetMode>("gimbal_pipeline/set_mode");
-    set_mode_clients_.emplace(autoaim_set_mode_client_2->get_service_name(),
-                              autoaim_set_mode_client_2);
-    auto buff_set_mode_client_1 =
-      this->create_client<rm_interfaces::srv::SetMode>("buff_detector/set_mode");
-    set_mode_clients_.emplace(buff_set_mode_client_1->get_service_name(),
-                              buff_set_mode_client_1);
-    auto buff_set_mode_client_2 =
-      this->create_client<rm_interfaces::srv::SetMode>("buff_pose_estimator/set_mode");
-    set_mode_clients_.emplace(buff_set_mode_client_2->get_service_name(),
-                              buff_set_mode_client_2);
-    if (has_rune_) {
-      auto client1 = this->create_client<rm_interfaces::srv::SetMode>("rune_detector/set_mode");
-      set_mode_clients_.emplace(client1->get_service_name(), client1);
-    }
+    set_mode_clients_.emplace(autoaim_set_mode_client->get_service_name(),
+                              autoaim_set_mode_client);
 
     timer_ = this->create_wall_timer(std::chrono::milliseconds(1), [this]() {
       serial_receive_data_msg_.header.stamp = this->now();
@@ -185,8 +167,6 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   rm_interfaces::msg::SerialReceiveData serial_receive_data_msg_;
   geometry_msgs::msg::TransformStamped transform_stamped_;
-
-  bool has_rune_;
 
   std::unordered_map<std::string, SetModeClient> set_mode_clients_;
   std::vector<rclcpp::TimerBase::SharedPtr> timers_;

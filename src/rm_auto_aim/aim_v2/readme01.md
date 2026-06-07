@@ -194,7 +194,7 @@ ros2 launch rm_bringup bringup_v2.launch.py \
   control_backend:=planner
 ```
 
-注意：`rm_bringup/package.xml` 里目前还有旧的 `rm_rune` 依赖。如果编译 `rm_bringup` 时提示找不到 `rm_rune`，这不是环境没配好，而是当前仓库的包依赖声明和实际目录不一致。自瞄调试时可以先直接用 `aim_v2.launch.py`。
+当前 v2 分支只保留 SP `aim_v2` 主链路，`rm_bringup` 已不再声明旧 `rm_rune` 或旧 `rm_auto_aim` 聚合包依赖。
 
 ## 9. 串口权限
 
@@ -284,15 +284,18 @@ sudo apt install -y ros-humble-cv-bridge
 sudo apt install -y libceres-dev
 ```
 
-### rm_rune 找不到
+### rm_bringup 编译范围
 
-先不要管 `rm_bringup`，直接跑：
+当前主链路编译：
+
+```bash
+colcon build --symlink-install --packages-up-to rm_bringup
+```
+
+如果只验证 `aim_v2` 本体，可以直接：
 
 ```bash
 colcon build --symlink-install --packages-up-to aim_v2
 source install/setup.bash
 ros2 launch aim_v2 aim_v2.launch.py enable_fire:=false
 ```
-
-等自瞄能跑起来后，再处理 `rm_bringup` 的旧依赖。
-

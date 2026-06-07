@@ -57,15 +57,9 @@ std::vector<rclcpp::SubscriptionBase::SharedPtr> ProtocolInfantry16::getSubscrip
 
 std::vector<rclcpp::Client<rm_interfaces::srv::SetMode>::SharedPtr> ProtocolInfantry16::getClients(
   rclcpp::Node::SharedPtr node) const {
-  auto client1 = node->create_client<rm_interfaces::srv::SetMode>("armor_detector/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  auto client2 = node->create_client<rm_interfaces::srv::SetMode>("gimbal_pipeline/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  auto client3 = node->create_client<rm_interfaces::srv::SetMode>("buff_detector/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  auto client4 = node->create_client<rm_interfaces::srv::SetMode>("buff_pose_estimator/set_mode",
-                                                                  rmw_qos_profile_services_default);
-  return {client1, client2, client3, client4}; 
+  auto client = node->create_client<rm_interfaces::srv::SetMode>("gimbal_pipeline/set_mode",
+                                                                 rmw_qos_profile_services_default);
+  return {client};
 }
 
 }  // namespace fyt::serial_driver::protocol

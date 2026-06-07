@@ -28,7 +28,7 @@ float64 confidence
 # ================== 来源标记 ==================
 # 用于标识当前状态估计的来源
 # DETECT: 融合了上游检测节点的位置估计
-# ESTIMATE: 融合了robot_pose_estimator发布的估计装甲板位置
+# ESTIMATE: 融合了上游估计节点发布的装甲板位置
 # PREDICT: 无观测输入，仅通过模型预测的位置估计
 uint8 SOURCE_DETECT = 0
 uint8 SOURCE_ESTIMATE = 1

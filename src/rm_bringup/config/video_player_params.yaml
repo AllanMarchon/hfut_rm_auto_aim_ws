@@ -3,7 +3,6 @@
 # ============================================================
 #
 # bringup_v2 会优先读取 config/video_player_params.yaml。
-# config/video_test/video_player_params.yaml 保留为默认/兼容版。
 #
 # 什么时候看这个文件：
 #   launch_params_decoupled.yaml 中：

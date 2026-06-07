@@ -18,7 +18,6 @@
 
 // project
 #include "rm_serial_driver/protocol.hpp"
-#include "rm_interfaces/msg/blind.hpp"
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float64.hpp>
 
@@ -32,7 +31,6 @@ public:
 
   void send(const rm_interfaces::msg::GimbalCmd &data) override;
   void send(const geometry_msgs::msg::Twist &data);
-  void send(const rm_interfaces::msg::Blind &data);
   //发送角度
   void send(const std_msgs::msg::Float64 &data);
   //发送爬坡标志位

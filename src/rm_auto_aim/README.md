@@ -15,3 +15,17 @@ aim_v2_node -> /armor_solver/cmd_gimbal
 ```text
 src/rm_bringup/launch/bringup_v2.launch.py
 ```
+
+## 环境配置
+
+环境配置以工作空间入口文档为准：
+
+```text
+src/README.md
+```
+
+`aim_v2` 的 OpenVINO、Ceres、串口权限和 SP25 原工程差异说明见：
+
+```text
+src/rm_auto_aim/aim_v2/readme.md
+```

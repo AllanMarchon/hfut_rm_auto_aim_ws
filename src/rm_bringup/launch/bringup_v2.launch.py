@@ -102,6 +102,12 @@ def generate_launch_description():
         description="aim_v2 检测器类型：yolo | traditional",
     )
 
+    declare_debug_visualization = DeclareLaunchArgument(
+        "debug_visualization",
+        default_value=launch_default("debug_visualization", True),
+        description="Publish aim_v2 debug image and MarkerArray topics for Foxglove/RViz",
+    )
+
     def create_camera_node(context):
         image_source = LaunchConfiguration("image_source").perform(context).lower()
         if image_source == "video":
@@ -194,6 +200,7 @@ def generate_launch_description():
                 ),
                 "async_inference": LaunchConfiguration("async_inference"),
                 "detector_type": LaunchConfiguration("detector_type"),
+                "debug_visualization": LaunchConfiguration("debug_visualization"),
             }
         ],
         remappings=[
@@ -216,6 +223,7 @@ def generate_launch_description():
             declare_derive_enemy_color_from_mode,
             declare_async_inference,
             declare_detector_type,
+            declare_debug_visualization,
             PushRosNamespace(LaunchConfiguration("namespace")),
             TimerAction(period=1.0, actions=[OpaqueFunction(function=create_serial_node)]),
             TimerAction(period=1.5, actions=[OpaqueFunction(function=create_camera_node)]),

@@ -1,5 +1,6 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <geometry_msgs/msg/point.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rm_interfaces/msg/gimbal_cmd.hpp>
 #include <rm_interfaces/msg/serial_receive_data.hpp>
@@ -7,20 +8,25 @@
 #include <rm_utils/heartbeat.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/header.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include <Eigen/Geometry>
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -99,6 +105,8 @@ public:
     derive_enemy_color_from_mode_ = declare_parameter<bool>("derive_enemy_color_from_mode", true);
     async_inference_ = declare_parameter<bool>("async_inference", true);
     enable_fire_ = declare_parameter<bool>("enable_fire", false);
+    debug_visualization_ = declare_parameter<bool>("debug_visualization", true);
+    debug_marker_frame_ = declare_parameter<std::string>("debug_marker_frame", "odom");
     default_bullet_speed_ = declare_parameter<double>("default_bullet_speed", 23.0);
     auto_aim_modes_ = declare_parameter<std::vector<int64_t>>("auto_aim_modes", {0, 1});
     serial_.bullet_speed = default_bullet_speed_;
@@ -140,6 +148,12 @@ public:
     }
 
     cmd_pub_ = create_publisher<rm_interfaces::msg::GimbalCmd>("cmd_gimbal", rclcpp::SensorDataQoS());
+    if (debug_visualization_) {
+      debug_image_pub_ =
+        create_publisher<sensor_msgs::msg::Image>("~/debug/image", rclcpp::SensorDataQoS());
+      debug_marker_pub_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>("~/debug/markers", 10);
+    }
 
     serial_sub_ = create_subscription<rm_interfaces::msg::SerialReceiveData>(
       "serial/receive", rclcpp::SensorDataQoS(),
@@ -202,6 +216,7 @@ private:
     std_msgs::msg::Header header;
     SerialState serial;
     std::chrono::steady_clock::time_point timestamp;
+    cv::Mat image;
   };
 
   struct ControlOutput
@@ -312,7 +327,9 @@ private:
       const auto timestamp = std::chrono::steady_clock::now();
       if (async_inference_) {
         if (async_detector_->push(cv_ptr->image, timestamp)) {
-          pushAsyncContext({msg->header, serial, timestamp});
+          pushAsyncContext(
+            {msg->header, serial, timestamp,
+             debug_visualization_ ? cv_ptr->image.clone() : cv::Mat{}});
           frame_count_++;
         } else {
           RCLCPP_WARN_THROTTLE(
@@ -328,7 +345,7 @@ private:
         armors = yolo_detector_->detect(cv_ptr->image, frame_count_);
       }
 
-      processDetectedFrame(msg->header, armors, serial, timestamp);
+      processDetectedFrame(msg->header, cv_ptr->image, armors, serial, timestamp);
       frame_count_++;
     } catch (const std::exception & e) {
       RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "aim_v2 frame failed: %s", e.what());
@@ -353,13 +370,14 @@ private:
         continue;
       }
 
-      processDetectedFrame(context->header, armors, context->serial, timestamp);
+      processDetectedFrame(context->header, context->image, armors, context->serial, timestamp);
     }
   }
 
   void processDetectedFrame(
-    const std_msgs::msg::Header & header, std::list<auto_aim::Armor> & armors,
-    const SerialState & serial, std::chrono::steady_clock::time_point timestamp)
+    const std_msgs::msg::Header & header, const cv::Mat & image,
+    std::list<auto_aim::Armor> & armors, const SerialState & serial,
+    std::chrono::steady_clock::time_point timestamp)
   {
     try {
       std::list<auto_aim::Target> targets;
@@ -374,6 +392,7 @@ private:
       }
 
       publishCommand(header, output, targets, serial);
+      publishDebug(header, image, armors, targets, output);
     } catch (const std::exception & e) {
       RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "aim_v2 frame failed: %s", e.what());
       publishIdle(header);
@@ -514,6 +533,222 @@ private:
     cmd_pub_->publish(cmd);
   }
 
+  void publishDebug(
+    const std_msgs::msg::Header & header, const cv::Mat & image,
+    const std::list<auto_aim::Armor> & armors, const std::list<auto_aim::Target> & targets,
+    const ControlOutput & output)
+  {
+    if (!debug_visualization_) return;
+    publishDebugImage(header, image, armors, targets, output);
+    publishDebugMarkers(header, armors, targets);
+  }
+
+  cv::Scalar armorDrawColor(auto_aim::Color color) const
+  {
+    if (color == auto_aim::red) return {0, 0, 255};
+    if (color == auto_aim::blue) return {255, 80, 0};
+    if (color == auto_aim::purple) return {255, 0, 255};
+    return {160, 160, 160};
+  }
+
+  std::string armorColorLabel(auto_aim::Color color) const
+  {
+    const auto index = static_cast<std::size_t>(color);
+    if (index < auto_aim::COLORS.size()) return auto_aim::COLORS[index];
+    return "unknown";
+  }
+
+  void publishDebugImage(
+    const std_msgs::msg::Header & header, const cv::Mat & image,
+    const std::list<auto_aim::Armor> & armors, const std::list<auto_aim::Target> & targets,
+    const ControlOutput & output)
+  {
+    if (!debug_image_pub_ || image.empty()) return;
+
+    cv::Mat vis;
+    image.copyTo(vis);
+    const cv::Rect frame_rect(0, 0, vis.cols, vis.rows);
+
+    for (const auto & armor : armors) {
+      const auto color = armorDrawColor(armor.color);
+      if (armor.box.width > 0 && armor.box.height > 0) {
+        const auto box = armor.box & frame_rect;
+        if (!box.empty()) cv::rectangle(vis, box, color, 2);
+      }
+
+      if (armor.points.size() >= 4) {
+        for (std::size_t i = 0; i < armor.points.size(); ++i) {
+          cv::line(
+            vis, cv::Point(armor.points[i]), cv::Point(armor.points[(i + 1) % armor.points.size()]),
+            color, 2);
+          cv::circle(vis, cv::Point(armor.points[i]), 3, color, -1);
+        }
+      }
+
+      std::ostringstream label;
+      label << armorName(armor.name) << " " << armorColorLabel(armor.color) << " "
+            << static_cast<int>(std::round(armor.confidence * 100.0)) << "%";
+      const auto text_origin = armor.box.empty()
+        ? cv::Point(armor.center)
+        : cv::Point(armor.box.x, std::max(12, armor.box.y - 6));
+      cv::putText(
+        vis, label.str(), text_origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv::LINE_AA);
+    }
+
+    std::ostringstream status;
+    status << "targets=" << targets.size() << " yaw=" << static_cast<int>(radToDeg(output.yaw_rad))
+           << " pitch=" << static_cast<int>(radToDeg(output.pitch_rad))
+           << " fire=" << (output.shoot ? "yes" : "no");
+    cv::putText(
+      vis, status.str(), cv::Point(12, 24), cv::FONT_HERSHEY_SIMPLEX, 0.65,
+      cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
+
+    auto msg = cv_bridge::CvImage(header, "bgr8", vis).toImageMsg();
+    debug_image_pub_->publish(*msg);
+  }
+
+  bool finite3(const Eigen::Vector3d & p) const
+  {
+    return std::isfinite(p.x()) && std::isfinite(p.y()) && std::isfinite(p.z());
+  }
+
+  void setMarkerColor(
+    visualization_msgs::msg::Marker & marker, double r, double g, double b, double a) const
+  {
+    marker.color.r = static_cast<float>(r);
+    marker.color.g = static_cast<float>(g);
+    marker.color.b = static_cast<float>(b);
+    marker.color.a = static_cast<float>(a);
+  }
+
+  void setMarkerPosition(visualization_msgs::msg::Marker & marker, const Eigen::Vector3d & p) const
+  {
+    marker.pose.position.x = p.x();
+    marker.pose.position.y = p.y();
+    marker.pose.position.z = p.z();
+    marker.pose.orientation.w = 1.0;
+  }
+
+  visualization_msgs::msg::Marker baseMarker(
+    const std_msgs::msg::Header & header, const std::string & ns, int id, int type) const
+  {
+    visualization_msgs::msg::Marker marker;
+    marker.header = header;
+    marker.header.frame_id = debug_marker_frame_;
+    marker.ns = ns;
+    marker.id = id;
+    marker.type = type;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.lifetime = rclcpp::Duration::from_seconds(0.25).to_msg();
+    return marker;
+  }
+
+  void publishDebugMarkers(
+    const std_msgs::msg::Header & header, const std::list<auto_aim::Armor> & armors,
+    const std::list<auto_aim::Target> & targets)
+  {
+    if (!debug_marker_pub_) return;
+
+    visualization_msgs::msg::MarkerArray marker_array;
+    visualization_msgs::msg::Marker clear;
+    clear.header = header;
+    clear.header.frame_id = debug_marker_frame_;
+    clear.action = visualization_msgs::msg::Marker::DELETEALL;
+    marker_array.markers.push_back(clear);
+
+    int id = 1;
+    for (const auto & armor : armors) {
+      if (!finite3(armor.xyz_in_world)) continue;
+
+      auto marker = baseMarker(header, "aim_v2/detected_armor", id++,
+        visualization_msgs::msg::Marker::SPHERE);
+      setMarkerPosition(marker, armor.xyz_in_world);
+      marker.scale.x = 0.06;
+      marker.scale.y = 0.06;
+      marker.scale.z = 0.06;
+      if (armor.color == auto_aim::red) {
+        setMarkerColor(marker, 1.0, 0.0, 0.0, 0.9);
+      } else if (armor.color == auto_aim::blue) {
+        setMarkerColor(marker, 0.0, 0.35, 1.0, 0.9);
+      } else {
+        setMarkerColor(marker, 0.7, 0.7, 0.7, 0.6);
+      }
+      marker_array.markers.push_back(marker);
+
+      auto text = baseMarker(header, "aim_v2/detected_armor_text", id++,
+        visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
+      setMarkerPosition(text, armor.xyz_in_world + Eigen::Vector3d(0.0, 0.0, 0.08));
+      text.scale.z = 0.08;
+      setMarkerColor(text, 1.0, 1.0, 1.0, 1.0);
+      text.text = armorName(armor.name);
+      marker_array.markers.push_back(text);
+    }
+
+    for (const auto & target : targets) {
+      const auto x = target.ekf_x();
+      if (x.size() < 6) continue;
+      const Eigen::Vector3d center{x[0], x[2], x[4]};
+      const Eigen::Vector3d velocity{x[1], x[3], x[5]};
+      if (!finite3(center)) continue;
+
+      auto center_marker = baseMarker(header, "aim_v2/target_center", id++,
+        visualization_msgs::msg::Marker::SPHERE);
+      setMarkerPosition(center_marker, center);
+      center_marker.scale.x = 0.12;
+      center_marker.scale.y = 0.12;
+      center_marker.scale.z = 0.12;
+      setMarkerColor(center_marker, 0.0, 1.0, 0.0, 0.95);
+      marker_array.markers.push_back(center_marker);
+
+      auto velocity_marker = baseMarker(header, "aim_v2/target_velocity", id++,
+        visualization_msgs::msg::Marker::ARROW);
+      geometry_msgs::msg::Point start;
+      start.x = center.x();
+      start.y = center.y();
+      start.z = center.z();
+      const auto end_pos = center + velocity * 0.2;
+      geometry_msgs::msg::Point end;
+      end.x = end_pos.x();
+      end.y = end_pos.y();
+      end.z = end_pos.z();
+      velocity_marker.points.push_back(start);
+      velocity_marker.points.push_back(end);
+      velocity_marker.scale.x = 0.02;
+      velocity_marker.scale.y = 0.04;
+      velocity_marker.scale.z = 0.0;
+      setMarkerColor(velocity_marker, 0.0, 0.6, 1.0, 0.8);
+      marker_array.markers.push_back(velocity_marker);
+
+      for (const auto & xyza : target.armor_xyza_list()) {
+        const Eigen::Vector3d armor_pos{xyza[0], xyza[1], xyza[2]};
+        if (!finite3(armor_pos)) continue;
+        auto armor_marker = baseMarker(header, "aim_v2/target_armors", id++,
+          visualization_msgs::msg::Marker::CUBE);
+        setMarkerPosition(armor_marker, armor_pos);
+        armor_marker.pose.orientation.z = std::sin(xyza[3] * 0.5);
+        armor_marker.pose.orientation.w = std::cos(xyza[3] * 0.5);
+        armor_marker.scale.x = target.armor_type == auto_aim::big ? 0.23 : 0.13;
+        armor_marker.scale.y = 0.04;
+        armor_marker.scale.z = 0.06;
+        setMarkerColor(armor_marker, 1.0, 0.8, 0.0, 0.45);
+        marker_array.markers.push_back(armor_marker);
+      }
+
+      auto text = baseMarker(header, "aim_v2/target_text", id++,
+        visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
+      setMarkerPosition(text, center + Eigen::Vector3d(0.0, 0.0, 0.18));
+      text.scale.z = 0.1;
+      setMarkerColor(text, 1.0, 1.0, 1.0, 1.0);
+      std::ostringstream label;
+      label << armorName(target.name) << " v_yaw=" << std::fixed << std::setprecision(2)
+            << (x.size() > 7 ? x[7] : 0.0);
+      text.text = label.str();
+      marker_array.markers.push_back(text);
+    }
+
+    debug_marker_pub_->publish(marker_array);
+  }
+
   bool isFiniteOutput(const ControlOutput & output) const
   {
     return std::isfinite(output.yaw_rad) && std::isfinite(output.pitch_rad) &&
@@ -568,6 +803,8 @@ private:
   bool async_inference_ = true;
   bool use_planner_ = false;
   bool enable_fire_ = false;
+  bool debug_visualization_ = true;
+  std::string debug_marker_frame_ = "odom";
   double default_bullet_speed_ = 23.0;
   std::vector<int64_t> auto_aim_modes_;
   int frame_count_ = 0;
@@ -593,6 +830,8 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
   rclcpp::Subscription<rm_interfaces::msg::SerialReceiveData>::SharedPtr serial_sub_;
   rclcpp::Publisher<rm_interfaces::msg::GimbalCmd>::SharedPtr cmd_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr debug_image_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr debug_marker_pub_;
   rclcpp::Service<rm_interfaces::srv::SetMode>::SharedPtr set_mode_srv_;
   fyt::HeartBeatPublisher::SharedPtr heartbeat_;
 };

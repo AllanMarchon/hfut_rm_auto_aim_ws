@@ -67,3 +67,8 @@ aim_v2:
   # 需要强制时填 'red' 或 'blue'。
   enemy_color: ''
   derive_enemy_color_from_mode: true
+
+  # Foxglove/RViz 可视化：
+  #   /gimbal_pipeline/debug/image
+  #   /gimbal_pipeline/debug/markers
+  debug_visualization: true

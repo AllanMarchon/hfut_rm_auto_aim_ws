@@ -188,3 +188,30 @@ source /opt/intel/openvino_2024.6.0/setupvars.sh
 export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake
 colcon build --symlink-install --packages-up-to aim_v2
 ```
+
+## Foxglove 可视化
+
+SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。旧版的分散可视化话题已经随旧包移除；现在主要看 `aim_v2` 自己发布的调试话题：
+
+```text
+/image_raw
+/camera_info
+/tf
+/serial/receive
+/armor_solver/cmd_gimbal
+/gimbal_pipeline/debug/image
+/gimbal_pipeline/debug/markers
+```
+
+启动桥接：
+
+```bash
+sudo apt install -y ros-humble-foxglove-bridge
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+```
+
+Foxglove 连接：
+
+```text
+ws://localhost:8765
+```

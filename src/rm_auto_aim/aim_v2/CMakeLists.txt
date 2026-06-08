@@ -7,10 +7,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rm_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -74,11 +76,13 @@ target_include_directories(aim_v2_node PRIVATE
 
 ament_target_dependencies(aim_v2_node
   ament_index_cpp
+  geometry_msgs
   rclcpp
   rm_interfaces
   rm_utils
   sensor_msgs
   std_msgs
+  visualization_msgs
   cv_bridge
 )
 

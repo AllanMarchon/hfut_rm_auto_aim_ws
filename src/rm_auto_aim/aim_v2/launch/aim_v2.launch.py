@@ -47,6 +47,11 @@ def generate_launch_description():
     detector_type_arg = DeclareLaunchArgument(
         "detector_type", default_value="yolo", description="yolo or traditional"
     )
+    debug_visualization_arg = DeclareLaunchArgument(
+        "debug_visualization",
+        default_value="true",
+        description="Publish debug image and MarkerArray topics for Foxglove/RViz",
+    )
 
     aim_node = Node(
         package="aim_v2",
@@ -65,6 +70,7 @@ def generate_launch_description():
                 ),
                 "async_inference": LaunchConfiguration("async_inference"),
                 "detector_type": LaunchConfiguration("detector_type"),
+                "debug_visualization": LaunchConfiguration("debug_visualization"),
             }
         ],
         remappings=[
@@ -86,6 +92,7 @@ def generate_launch_description():
             derive_enemy_color_from_mode_arg,
             async_inference_arg,
             detector_type_arg,
+            debug_visualization_arg,
             aim_node,
         ]
     )

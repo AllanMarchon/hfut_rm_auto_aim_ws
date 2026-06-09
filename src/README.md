@@ -35,6 +35,52 @@ SP25 原工程的实车参考环境：
 - 海康相机或 MindVision 相机；没有实体相机时可以先用 `video_player`
 - MicroUSB 串口或虚拟串口；没有下位机时可以先用 `virtual_serial`
 
+### 0. 从干净终端开始
+
+ROS2 Humble 建议使用系统 Python 环境编译，不建议在 Conda 的 `base`、`py310` 等环境中编译。若终端前缀显示 `(py310)`，或者 `conda env list` 报：
+
+```text
+bash: /home/allan/miniconda3/bin/conda: 没有那个文件或目录
+```
+
+说明 `.bashrc` 里还残留旧 Conda 初始化配置。先备份并清理：
+
+```bash
+cd ~
+cp ~/.bashrc ~/.bashrc.bak.$(date +%Y%m%d_%H%M%S)
+grep -nE "conda|py310|miniconda|anaconda|miniforge|mamba" ~/.bashrc ~/.profile ~/.bash_aliases 2>/dev/null
+nano ~/.bashrc
+```
+
+删除或注释掉类似下面的整段：
+
+```bash
+# >>> conda initialize >>>
+...
+# <<< conda initialize <<<
+```
+
+然后重开当前 shell：
+
+```bash
+exec bash
+```
+
+确认没有 Conda 残留：
+
+```bash
+type conda
+echo "$CONDA_DEFAULT_ENV"
+echo "$CONDA_PREFIX"
+echo "$PATH" | tr ':' '\n' | grep -i conda || echo "no conda path"
+```
+
+后续命令的目录约定：
+
+- 清理 `.bashrc`、`sudo apt install`：在哪个目录都可以，建议在 `~`。
+- 安装 OpenVINO：最终安装到 `/opt/intel/openvino_2024.6.0`。
+- 编译和启动本工程：必须进入 `~/hfut_rm_auto_aim_ws-2.0` 工作空间根目录。
+
 安装基础工具：
 
 ```bash
@@ -85,7 +131,19 @@ sudo apt install -y \
   ros-humble-rosidl-default-generators
 ```
 
-`aim_v2` 需要 OpenVINO。以 `/opt/intel/openvino_2024.6.0` 为例：
+`aim_v2` 需要 OpenVINO C++ SDK。先检查机器上是否已经安装过：
+
+```bash
+find /opt/intel /usr -name OpenVINOConfig.cmake 2>/dev/null
+```
+
+如果能找到，例如：
+
+```text
+/opt/intel/openvino_2024.6.0/runtime/cmake/OpenVINOConfig.cmake
+```
+
+则编译前使用对应路径：
 
 ```bash
 source /opt/intel/openvino_2024.6.0/setupvars.sh
@@ -93,7 +151,22 @@ export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake
 ls "$OpenVINO_DIR/OpenVINOConfig.cmake"
 ```
 
-如果你的 OpenVINO 版本或安装路径不同，把路径改成实际值。
+如果没有找到 `OpenVINOConfig.cmake`，安装 OpenVINO 2024.6 到推荐路径：
+
+```bash
+cd ~/Downloads
+curl -L https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/linux/l_openvino_toolkit_ubuntu22_2024.6.0.17404.4c0f47d2335_x86_64.tgz -o openvino_2024.6.0.tgz
+tar -xf openvino_2024.6.0.tgz
+
+sudo mkdir -p /opt/intel
+sudo rm -rf /opt/intel/openvino_2024.6.0
+sudo mv l_openvino_toolkit_ubuntu22_2024.6.0.17404.4c0f47d2335_x86_64 /opt/intel/openvino_2024.6.0
+
+cd /opt/intel/openvino_2024.6.0
+sudo -E ./install_dependencies/install_openvino_dependencies.sh
+```
+
+`pip install openvino` 主要面向 Python，不等价于本工程需要的 CMake SDK。`ros-humble-openvino` 也不是这里 `find_package(OpenVINO REQUIRED COMPONENTS Runtime)` 要找的包。
 
 进入工作空间根目录后安装 ROS 依赖：
 
@@ -168,26 +241,61 @@ rm_serial_driver -> 下位机
 
 ## 编译与运行
 
+每个新终端先进入工作空间并加载 ROS2、OpenVINO：
+
 ```bash
+cd ~/hfut_rm_auto_aim_ws-2.0
 source /opt/ros/humble/setup.bash
 source /opt/intel/openvino_2024.6.0/setupvars.sh
 export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake
-colcon build --symlink-install --packages-up-to rm_bringup
+```
+
+第一步，先编译自瞄核心：
+
+```bash
+colcon build --symlink-install --packages-up-to aim_v2 --parallel-workers 2
+```
+
+第二步，如果要跑“本地视频 + 虚拟串口”的完整测试链路，只补编需要的运行包：
+
+```bash
 source install/setup.bash
+colcon build --symlink-install \
+  --packages-select video_player rm_serial_driver rm_bringup \
+  --parallel-workers 2
+```
+
+编译完成后重新加载 install 空间：
+
+```bash
+source install/setup.bash
+ros2 pkg list | grep rm_bringup
+```
+
+启动视频测试链路前，先确认 `src/rm_bringup/config/video_player_params.yaml` 里的 `video_path` 指向真实存在的视频文件。默认 `decoded/output.mp4` 只是占位路径；不确定时建议写绝对路径。
+
+```bash
+find ~/hfut_rm_auto_aim_ws-2.0 -iname "*.mp4" -o -iname "*.avi"
+nano src/rm_bringup/config/video_player_params.yaml
+```
+
+然后启动：
+
+```bash
 ros2 launch rm_bringup bringup_v2.launch.py \
   image_source:=video \
   virtual_serial:=true \
   enable_fire:=false
 ```
 
-如果只想先编 SP 自瞄核心：
+判断图像是否正常发布：
 
 ```bash
-source /opt/ros/humble/setup.bash
-source /opt/intel/openvino_2024.6.0/setupvars.sh
-export OpenVINO_DIR=/opt/intel/openvino_2024.6.0/runtime/cmake
-colcon build --symlink-install --packages-up-to aim_v2
+ros2 topic hz /image_raw
+ros2 topic list | grep gimbal_pipeline
 ```
+
+如果要使用海康或 MindVision 实体相机，再单独安装相机 SDK 并编译对应相机包。只跑视频链路时不需要编译 `ros2_hik_camera` 或 `mindvision_camera`。
 
 ## Foxglove 可视化
 

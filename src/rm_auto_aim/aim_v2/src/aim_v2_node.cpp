@@ -639,7 +639,8 @@ private:
     marker.id = id;
     marker.type = type;
     marker.action = visualization_msgs::msg::Marker::ADD;
-    marker.lifetime = rclcpp::Duration::from_seconds(0.25).to_msg();
+    marker.lifetime.sec = 0;
+    marker.lifetime.nanosec = 250000000;
     return marker;
   }
 

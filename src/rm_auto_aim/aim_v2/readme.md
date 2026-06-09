@@ -32,6 +32,24 @@ SP25 README 中的实车环境：
 source /opt/ros/humble/setup.bash
 ```
 
+建议在干净的系统 Python 终端中编译 ROS2，不要在 Conda 的 `base`、`py310` 等环境中编译。如果终端显示 `(py310)`，但 `conda env list` 又提示 `/home/allan/miniconda3/bin/conda` 不存在，说明 `.bashrc` 里残留了旧 Conda 初始化块。可以先备份并清理：
+
+```bash
+cd ~
+cp ~/.bashrc ~/.bashrc.bak.$(date +%Y%m%d_%H%M%S)
+grep -nE "conda|py310|miniconda|anaconda|miniforge|mamba" ~/.bashrc ~/.profile ~/.bash_aliases 2>/dev/null
+nano ~/.bashrc
+exec bash
+```
+
+清理目标是删除或注释：
+
+```bash
+# >>> conda initialize >>>
+...
+# <<< conda initialize <<<
+```
+
 建议安装常用编译工具：
 
 ```bash
@@ -118,6 +136,12 @@ find_package(OpenVINO REQUIRED COMPONENTS Runtime)
 
 所以只要 CMake 能找到 OpenVINO 即可。推荐使用 OpenVINO 2024.x。
 
+先检查是否已经有 CMake 配置文件：
+
+```bash
+find /opt/intel /usr -name OpenVINOConfig.cmake 2>/dev/null
+```
+
 如果使用 archive 安装到 `/opt/intel/openvino_2024.6.0`，每次编译前执行：
 
 ```bash
@@ -132,6 +156,23 @@ ls "$OpenVINO_DIR/OpenVINOConfig.cmake"
 ```
 
 如果该文件存在，`find_package(OpenVINO REQUIRED COMPONENTS Runtime)` 通常就能通过。
+
+如果没有安装 OpenVINO C++ SDK，可以用 archive 安装到推荐路径：
+
+```bash
+cd ~/Downloads
+curl -L https://storage.openvinotoolkit.org/repositories/openvino/packages/2024.6/linux/l_openvino_toolkit_ubuntu22_2024.6.0.17404.4c0f47d2335_x86_64.tgz -o openvino_2024.6.0.tgz
+tar -xf openvino_2024.6.0.tgz
+
+sudo mkdir -p /opt/intel
+sudo rm -rf /opt/intel/openvino_2024.6.0
+sudo mv l_openvino_toolkit_ubuntu22_2024.6.0.17404.4c0f47d2335_x86_64 /opt/intel/openvino_2024.6.0
+
+cd /opt/intel/openvino_2024.6.0
+sudo -E ./install_dependencies/install_openvino_dependencies.sh
+```
+
+`pip install openvino` 主要用于 Python，不保证提供本工程 CMake 要找的 `OpenVINOConfig.cmake`。`ros-humble-openvino` 也不是 `aim_v2` 这里要找的包。
 
 当前 `aim_v2/config/aim_v2.yaml` 默认：
 
@@ -231,19 +272,26 @@ rosdep install --from-paths src --ignore-src -r -y --skip-keys "openvino ceres"
 第一步，只编 `aim_v2` 和它的接口依赖：
 
 ```bash
-colcon build --symlink-install --packages-up-to aim_v2
+colcon build --symlink-install --packages-up-to aim_v2 --parallel-workers 2
 ```
 
-第二步，编串口链路：
+第二步，如果使用本地视频和虚拟串口，只补编这三个运行包：
 
 ```bash
-colcon build --symlink-install --packages-up-to rm_serial_driver
+source install/setup.bash
+colcon build --symlink-install \
+  --packages-select video_player rm_serial_driver rm_bringup \
+  --parallel-workers 2
 ```
 
-第三步，再尝试 bringup：
+不要一开始就 `--packages-up-to rm_bringup`。`rm_bringup` 的 launch 文件支持 MindVision、海康和视频三种输入；如果把所有上游包都拉进来，未安装实体相机 SDK 时容易被相机包卡住。只跑视频链路时不需要编译 `mindvision_camera` 或 `ros2_hik_camera`。
+
+如果确实要使用实体相机，再单独编对应相机包：
 
 ```bash
-colcon build --symlink-install --packages-up-to rm_bringup
+colcon build --symlink-install --packages-select mindvision_camera
+# 或
+colcon build --symlink-install --packages-select ros2_hik_camera
 ```
 
 如果机器内存紧张：
@@ -283,12 +331,21 @@ ros2 launch aim_v2 aim_v2.launch.py \
 如果 `rm_bringup` 已经编译通过，可以使用整条测试链路：
 
 ```bash
+source install/setup.bash
 ros2 launch rm_bringup bringup_v2.launch.py \
   virtual_serial:=true \
   image_source:=video \
   enable_fire:=false \
   control_backend:=planner
 ```
+
+视频链路启动前确认 `src/rm_bringup/config/video_player_params.yaml` 中的 `video_path` 指向真实视频文件。默认 `decoded/output.mp4` 只是占位路径，推荐改成绝对路径。启动后如果看到：
+
+```text
+Failed to open video file: decoded/output.mp4
+```
+
+说明节点已启动，但视频文件不存在或路径不对。
 
 实车前保持：
 
@@ -336,12 +393,27 @@ sudo apt install -y libceres-dev
 
 ### 10.3 rm_bringup 编译范围
 
-当前 v2 分支只保留 SP `aim_v2` 主链路。`rm_bringup/package.xml` 不再声明旧 `rm_auto_aim` 聚合包或 `rm_rune` 依赖。
+当前 v2 分支只保留 SP `aim_v2` 主链路。`rm_bringup/package.xml` 不再声明旧 `rm_auto_aim` 聚合包或 `rm_rune` 依赖，实体相机包也应按需要单独编译。
 
-常用编译：
+视频 + 虚拟串口链路的常用编译：
 
 ```bash
-colcon build --symlink-install --packages-up-to rm_bringup
+colcon build --symlink-install \
+  --packages-select video_player rm_serial_driver rm_bringup \
+  --parallel-workers 2
+```
+
+如果报：
+
+```text
+Package 'rm_bringup' not found
+```
+
+通常是只编译了 `aim_v2`，还没有编译并 source `rm_bringup`：
+
+```bash
+source install/setup.bash
+ros2 pkg list | grep rm_bringup
 ```
 
 ### 10.4 找不到 cv_bridge

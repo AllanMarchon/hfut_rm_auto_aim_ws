@@ -71,4 +71,6 @@ aim_v2:
   # Foxglove/RViz 可视化：
   #   /gimbal_pipeline/debug/image
   #   /gimbal_pipeline/debug/markers
+  #   /armor_detector/marker
+  #   /armor_solver/marker
   debug_visualization: true

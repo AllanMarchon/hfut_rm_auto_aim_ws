@@ -299,7 +299,7 @@ ros2 topic list | grep gimbal_pipeline
 
 ## Foxglove 可视化
 
-SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。旧版的分散可视化话题已经随旧包移除；现在主要看 `aim_v2` 自己发布的调试话题：
+SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。`aim_v2` 仍然保留旧版 Foxglove/RViz 常用的 marker 话题，方便沿用原来的可视化习惯：
 
 ```text
 /image_raw
@@ -307,19 +307,63 @@ SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。旧版的分散�
 /tf
 /serial/receive
 /armor_solver/cmd_gimbal
+/armor_detector/marker
+/armor_solver/marker
 /gimbal_pipeline/debug/image
 /gimbal_pipeline/debug/markers
 ```
+
+推荐先看这些：
+
+- `/gimbal_pipeline/debug/image`：二维调试图，包含检测板轮廓、跟踪模型板重投影、最终瞄准点。
+- `/armor_detector/marker`：兼容旧版检测可视化，namespace 主要是 `armors` 和 `classification`。
+- `/armor_solver/marker`：兼容旧版解算/预测可视化，namespace 主要是 `position`、`linear_v`、`angular_v`、`filtered_armors`、`selection`、`armor_points`、`predicted_sequence`。
+- `/gimbal_pipeline/debug/markers`：把上面两类 marker 合并到一个话题里，适合临时查看。
 
 启动桥接：
 
 ```bash
 sudo apt install -y ros-humble-foxglove-bridge
-ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+
+cd ~/hfut_rm_auto_aim_ws-2.0
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 pkg prefix rm_interfaces
+ros2 launch foxglove_bridge foxglove_bridge_launch.xml address:=0.0.0.0 port:=8765
 ```
 
-Foxglove 连接：
+`foxglove_bridge` 必须能找到本仓库的自定义消息包，例如 `rm_interfaces/msg/GimbalCmd`。如果只 source 了 `/opt/ros/humble`，会报 `package 'rm_interfaces' not found`。
+
+确认 bridge 正在对外监听：
+
+```bash
+ss -lntp | grep 8765
+```
+
+理想情况下能看到 `0.0.0.0:8765` 或 `*:8765`。如果只看到 `127.0.0.1:8765`，本地电脑无法直接连接。
+
+Foxglove 如果开在虚拟机里，连接：
 
 ```text
 ws://localhost:8765
 ```
+
+Foxglove 如果开在本地电脑上，而 ROS2 跑在虚拟机里，先查虚拟机 IP：
+
+```bash
+hostname -I
+```
+
+然后在本地电脑 Foxglove 中连接：
+
+```text
+ws://<虚拟机IP>:8765
+```
+
+如果本地电脑连不上，先在本地电脑测试端口：
+
+```powershell
+Test-NetConnection <虚拟机IP> -Port 8765
+```
+
+如果 `PingSucceeded` 和 `TcpTestSucceeded` 都是 `False`，说明宿主机到虚拟机网络不通，不是 ROS2 或 Foxglove 的问题。优先把虚拟机网络改成桥接模式，让虚拟机拿到和本地电脑同一网段的 IP；或者在 NAT 模式里做端口转发，把宿主机 `8765` 转发到虚拟机 `8765`，然后 Foxglove 连接 `ws://127.0.0.1:8765`。

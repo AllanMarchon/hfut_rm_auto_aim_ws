@@ -153,6 +153,10 @@ public:
         create_publisher<sensor_msgs::msg::Image>("~/debug/image", rclcpp::SensorDataQoS());
       debug_marker_pub_ =
         create_publisher<visualization_msgs::msg::MarkerArray>("~/debug/markers", 10);
+      detector_marker_pub_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>("armor_detector/marker", 10);
+      solver_marker_pub_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>("armor_solver/marker", 10);
     }
 
     serial_sub_ = create_subscription<rm_interfaces::msg::SerialReceiveData>(
@@ -540,7 +544,7 @@ private:
   {
     if (!debug_visualization_) return;
     publishDebugImage(header, image, armors, targets, output);
-    publishDebugMarkers(header, armors, targets);
+    publishDebugMarkers(header, armors, targets, output);
   }
 
   cv::Scalar armorDrawColor(auto_aim::Color color) const
@@ -558,6 +562,72 @@ private:
     return "unknown";
   }
 
+  bool finitePoint(const cv::Point2f & p) const
+  {
+    return std::isfinite(p.x) && std::isfinite(p.y);
+  }
+
+  bool finite4(const Eigen::Vector4d & p) const
+  {
+    return std::isfinite(p[0]) && std::isfinite(p[1]) && std::isfinite(p[2]) &&
+           std::isfinite(p[3]);
+  }
+
+  double armorMarkerWidth(auto_aim::ArmorType type) const
+  {
+    return type == auto_aim::big ? 0.23 : 0.135;
+  }
+
+  std::optional<Eigen::Vector4d> selectedAimXyza(const ControlOutput & output) const
+  {
+    if (!output.control) return std::nullopt;
+
+    if (use_planner_) {
+      if (planner_ && finite4(planner_->debug_xyza)) return planner_->debug_xyza;
+      return std::nullopt;
+    }
+
+    if (aimer_ && aimer_->debug_aim_point.valid && finite4(aimer_->debug_aim_point.xyza)) {
+      return aimer_->debug_aim_point.xyza;
+    }
+    return std::nullopt;
+  }
+
+  void drawProjectedArmor(
+    cv::Mat & vis, const std::vector<cv::Point2f> & points, const cv::Scalar & color,
+    int thickness) const
+  {
+    if (points.size() < 4) return;
+    for (const auto & point : points) {
+      if (!finitePoint(point)) return;
+    }
+
+    for (std::size_t i = 0; i < points.size(); ++i) {
+      const cv::Point p0(points[i]);
+      const cv::Point p1(points[(i + 1) % points.size()]);
+      cv::line(vis, p0, p1, color, thickness, cv::LINE_AA);
+      cv::circle(vis, p0, 3, color, -1, cv::LINE_AA);
+    }
+  }
+
+  void drawAimCross(cv::Mat & vis, const cv::Point2f & point, const cv::Scalar & color) const
+  {
+    if (!finitePoint(point)) return;
+
+    constexpr int kHalfSize = 10;
+    const cv::Point center(point);
+    cv::line(
+      vis, cv::Point(center.x - kHalfSize, center.y), cv::Point(center.x + kHalfSize, center.y),
+      color, 2, cv::LINE_AA);
+    cv::line(
+      vis, cv::Point(center.x, center.y - kHalfSize), cv::Point(center.x, center.y + kHalfSize),
+      color, 2, cv::LINE_AA);
+    cv::circle(vis, center, 6, color, 2, cv::LINE_AA);
+    cv::putText(
+      vis, "AIM", center + cv::Point(8, -8), cv::FONT_HERSHEY_SIMPLEX, 0.55, color, 2,
+      cv::LINE_AA);
+  }
+
   void publishDebugImage(
     const std_msgs::msg::Header & header, const cv::Mat & image,
     const std::list<auto_aim::Armor> & armors, const std::list<auto_aim::Target> & targets,
@@ -573,21 +643,19 @@ private:
       const auto color = armorDrawColor(armor.color);
       if (armor.box.width > 0 && armor.box.height > 0) {
         const auto box = armor.box & frame_rect;
-        if (!box.empty()) cv::rectangle(vis, box, color, 2);
+        if (!box.empty()) cv::rectangle(vis, box, color, 2, cv::LINE_AA);
       }
 
       if (armor.points.size() >= 4) {
-        for (std::size_t i = 0; i < armor.points.size(); ++i) {
-          cv::line(
-            vis, cv::Point(armor.points[i]), cv::Point(armor.points[(i + 1) % armor.points.size()]),
-            color, 2);
-          cv::circle(vis, cv::Point(armor.points[i]), 3, color, -1);
-        }
+        drawProjectedArmor(vis, armor.points, color, 2);
       }
 
       std::ostringstream label;
-      label << armorName(armor.name) << " " << armorColorLabel(armor.color) << " "
+      label << "D " << armorName(armor.name) << " " << armorColorLabel(armor.color) << " "
             << static_cast<int>(std::round(armor.confidence * 100.0)) << "%";
+      if (finite3(armor.xyz_in_world)) {
+        label << " " << std::fixed << std::setprecision(1) << armor.xyz_in_world.norm() << "m";
+      }
       const auto text_origin = armor.box.empty()
         ? cv::Point(armor.center)
         : cv::Point(armor.box.x, std::max(12, armor.box.y - 6));
@@ -595,10 +663,43 @@ private:
         vis, label.str(), text_origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv::LINE_AA);
     }
 
+    int target_id = 0;
+    for (const auto & target : targets) {
+      int armor_id = 0;
+      for (const auto & xyza : target.armor_xyza_list()) {
+        if (!finite4(xyza)) continue;
+        const Eigen::Vector3d xyz = xyza.head<3>();
+        const auto projected =
+          solver_->reproject_armor(xyz, xyza[3], target.armor_type, target.name);
+        drawProjectedArmor(vis, projected, cv::Scalar(0, 220, 255), 2);
+
+        if (!projected.empty() && finitePoint(projected.front())) {
+          std::ostringstream label;
+          label << "T" << target_id << ":" << armor_id;
+          cv::putText(
+            vis, label.str(), cv::Point(projected.front()) + cv::Point(4, -4),
+            cv::FONT_HERSHEY_SIMPLEX, 0.45, cv::Scalar(0, 220, 255), 1, cv::LINE_AA);
+        }
+        ++armor_id;
+      }
+      ++target_id;
+    }
+
+    const auto aim_xyza = selectedAimXyza(output);
+    if (aim_xyza) {
+      const std::vector<cv::Point3f> aim_world{
+        {static_cast<float>((*aim_xyza)[0]), static_cast<float>((*aim_xyza)[1]),
+         static_cast<float>((*aim_xyza)[2])}};
+      const auto pixels = solver_->world2pixel(aim_world);
+      if (!pixels.empty()) drawAimCross(vis, pixels.front(), cv::Scalar(255, 0, 255));
+    }
+
     std::ostringstream status;
-    status << "targets=" << targets.size() << " yaw=" << static_cast<int>(radToDeg(output.yaw_rad))
-           << " pitch=" << static_cast<int>(radToDeg(output.pitch_rad))
-           << " fire=" << (output.shoot ? "yes" : "no");
+    status << "det=" << armors.size() << " targets=" << targets.size()
+           << " ctrl=" << (output.control ? "yes" : "no")
+           << " yaw=" << std::fixed << std::setprecision(1) << radToDeg(output.yaw_rad)
+           << " pitch=" << radToDeg(output.pitch_rad) << " fire="
+           << (output.shoot ? "yes" : "no");
     cv::putText(
       vis, status.str(), cv::Point(12, 24), cv::FONT_HERSHEY_SIMPLEX, 0.65,
       cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
@@ -629,6 +730,77 @@ private:
     marker.pose.orientation.w = 1.0;
   }
 
+  void setMarkerQuaternion(
+    visualization_msgs::msg::Marker & marker, const Eigen::Quaterniond & q) const
+  {
+    const auto normalized = q.normalized();
+    marker.pose.orientation.x = normalized.x();
+    marker.pose.orientation.y = normalized.y();
+    marker.pose.orientation.z = normalized.z();
+    marker.pose.orientation.w = normalized.w();
+  }
+
+  void setMarkerYawPitch(
+    visualization_msgs::msg::Marker & marker, double yaw, double pitch) const
+  {
+    const Eigen::Quaterniond q =
+      Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
+      Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY());
+    setMarkerQuaternion(marker, q);
+  }
+
+  void setDetectedArmorOrientation(
+    visualization_msgs::msg::Marker & marker, const auto_aim::Armor & armor) const
+  {
+    const Eigen::Quaterniond q =
+      Eigen::AngleAxisd(armor.ypr_in_world[0], Eigen::Vector3d::UnitZ()) *
+      Eigen::AngleAxisd(armor.ypr_in_world[1], Eigen::Vector3d::UnitY()) *
+      Eigen::AngleAxisd(armor.ypr_in_world[2], Eigen::Vector3d::UnitX());
+    setMarkerQuaternion(marker, q);
+  }
+
+  void setArmorMarkerShape(
+    visualization_msgs::msg::Marker & marker, auto_aim::ArmorType type, double height) const
+  {
+    marker.scale.x = 0.03;
+    marker.scale.y = armorMarkerWidth(type);
+    marker.scale.z = height;
+  }
+
+  geometry_msgs::msg::Point toPoint(const Eigen::Vector3d & p) const
+  {
+    geometry_msgs::msg::Point point;
+    point.x = p.x();
+    point.y = p.y();
+    point.z = p.z();
+    return point;
+  }
+
+  void setPredictionColor(visualization_msgs::msg::Marker & marker, int step) const
+  {
+    switch (step % 6) {
+      case 0:
+        setMarkerColor(marker, 1.0, 0.0, 0.0, 1.0);
+        break;
+      case 1:
+        setMarkerColor(marker, 1.0, 0.6, 0.0, 1.0);
+        break;
+      case 2:
+        setMarkerColor(marker, 1.0, 1.0, 0.0, 1.0);
+        break;
+      case 3:
+        setMarkerColor(marker, 0.0, 1.0, 0.0, 1.0);
+        break;
+      case 4:
+        setMarkerColor(marker, 0.0, 0.7, 1.0, 1.0);
+        break;
+      default:
+        setMarkerColor(marker, 0.8, 0.0, 1.0, 1.0);
+        break;
+    }
+    marker.color.a = static_cast<float>(std::max(0.15, 1.0 - step * 0.1));
+  }
+
   visualization_msgs::msg::Marker baseMarker(
     const std_msgs::msg::Header & header, const std::string & ns, int id, int type) const
   {
@@ -644,110 +816,195 @@ private:
     return marker;
   }
 
-  void publishDebugMarkers(
-    const std_msgs::msg::Header & header, const std::list<auto_aim::Armor> & armors,
-    const std::list<auto_aim::Target> & targets)
+  visualization_msgs::msg::Marker clearMarker(const std_msgs::msg::Header & header) const
   {
-    if (!debug_marker_pub_) return;
-
-    visualization_msgs::msg::MarkerArray marker_array;
     visualization_msgs::msg::Marker clear;
     clear.header = header;
     clear.header.frame_id = debug_marker_frame_;
     clear.action = visualization_msgs::msg::Marker::DELETEALL;
-    marker_array.markers.push_back(clear);
+    return clear;
+  }
 
-    int id = 1;
+  visualization_msgs::msg::MarkerArray buildDetectorMarkerArray(
+    const std_msgs::msg::Header & header, const std::list<auto_aim::Armor> & armors) const
+  {
+    visualization_msgs::msg::MarkerArray marker_array;
+    marker_array.markers.push_back(clearMarker(header));
+
+    int armor_id = 0;
+    int text_id = 0;
     for (const auto & armor : armors) {
       if (!finite3(armor.xyz_in_world)) continue;
 
-      auto marker = baseMarker(header, "aim_v2/detected_armor", id++,
-        visualization_msgs::msg::Marker::SPHERE);
-      setMarkerPosition(marker, armor.xyz_in_world);
-      marker.scale.x = 0.06;
-      marker.scale.y = 0.06;
-      marker.scale.z = 0.06;
-      if (armor.color == auto_aim::red) {
-        setMarkerColor(marker, 1.0, 0.0, 0.0, 0.9);
-      } else if (armor.color == auto_aim::blue) {
-        setMarkerColor(marker, 0.0, 0.35, 1.0, 0.9);
-      } else {
-        setMarkerColor(marker, 0.7, 0.7, 0.7, 0.6);
-      }
-      marker_array.markers.push_back(marker);
+      auto armor_marker =
+        baseMarker(header, "armors", armor_id++, visualization_msgs::msg::Marker::CUBE);
+      setMarkerPosition(armor_marker, armor.xyz_in_world);
+      setDetectedArmorOrientation(armor_marker, armor);
+      armor_marker.scale.x = 0.03;
+      armor_marker.scale.y = 0.15;
+      armor_marker.scale.z = 0.12;
+      setMarkerColor(armor_marker, 1.0, 0.0, 0.0, 1.0);
+      armor_marker.lifetime.nanosec = 100000000;
+      marker_array.markers.emplace_back(armor_marker);
 
-      auto text = baseMarker(header, "aim_v2/detected_armor_text", id++,
-        visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
-      setMarkerPosition(text, armor.xyz_in_world + Eigen::Vector3d(0.0, 0.0, 0.08));
-      text.scale.z = 0.08;
-      setMarkerColor(text, 1.0, 1.0, 1.0, 1.0);
-      text.text = armorName(armor.name);
-      marker_array.markers.push_back(text);
+      auto text_marker = baseMarker(
+        header, "classification", text_id++, visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
+      setMarkerPosition(text_marker, armor.xyz_in_world + Eigen::Vector3d(0.0, -0.1, 0.0));
+      text_marker.scale.z = 0.1;
+      setMarkerColor(text_marker, 1.0, 1.0, 1.0, 1.0);
+      text_marker.text = armorName(armor.name);
+      text_marker.lifetime.nanosec = 100000000;
+      marker_array.markers.emplace_back(text_marker);
     }
 
-    for (const auto & target : targets) {
-      const auto x = target.ekf_x();
-      if (x.size() < 6) continue;
-      const Eigen::Vector3d center{x[0], x[2], x[4]};
-      const Eigen::Vector3d velocity{x[1], x[3], x[5]};
-      if (!finite3(center)) continue;
+    return marker_array;
+  }
 
-      auto center_marker = baseMarker(header, "aim_v2/target_center", id++,
-        visualization_msgs::msg::Marker::SPHERE);
-      setMarkerPosition(center_marker, center);
-      center_marker.scale.x = 0.12;
-      center_marker.scale.y = 0.12;
-      center_marker.scale.z = 0.12;
-      setMarkerColor(center_marker, 0.0, 1.0, 0.0, 0.95);
-      marker_array.markers.push_back(center_marker);
+  visualization_msgs::msg::MarkerArray buildSolverMarkerArray(
+    const std_msgs::msg::Header & header, const std::list<auto_aim::Armor> & armors,
+    const std::list<auto_aim::Target> & targets, const ControlOutput & output) const
+  {
+    visualization_msgs::msg::MarkerArray marker_array;
+    marker_array.markers.push_back(clearMarker(header));
 
-      auto velocity_marker = baseMarker(header, "aim_v2/target_velocity", id++,
-        visualization_msgs::msg::Marker::ARROW);
-      geometry_msgs::msg::Point start;
-      start.x = center.x();
-      start.y = center.y();
-      start.z = center.z();
-      const auto end_pos = center + velocity * 0.2;
-      geometry_msgs::msg::Point end;
-      end.x = end_pos.x();
-      end.y = end_pos.y();
-      end.z = end_pos.z();
-      velocity_marker.points.push_back(start);
-      velocity_marker.points.push_back(end);
-      velocity_marker.scale.x = 0.02;
-      velocity_marker.scale.y = 0.04;
-      velocity_marker.scale.z = 0.0;
-      setMarkerColor(velocity_marker, 0.0, 0.6, 1.0, 0.8);
-      marker_array.markers.push_back(velocity_marker);
+    auto armor_points =
+      baseMarker(header, "armor_points", 0, visualization_msgs::msg::Marker::POINTS);
+    armor_points.scale.x = 0.1;
+    armor_points.scale.y = 0.1;
+    setMarkerColor(armor_points, 0.0, 1.0, 0.0, 1.0);
+    for (const auto & armor : armors) {
+      if (finite3(armor.xyz_in_world)) armor_points.points.emplace_back(toPoint(armor.xyz_in_world));
+    }
+    marker_array.markers.emplace_back(armor_points);
 
-      for (const auto & xyza : target.armor_xyza_list()) {
-        const Eigen::Vector3d armor_pos{xyza[0], xyza[1], xyza[2]};
-        if (!finite3(armor_pos)) continue;
-        auto armor_marker = baseMarker(header, "aim_v2/target_armors", id++,
-          visualization_msgs::msg::Marker::CUBE);
-        setMarkerPosition(armor_marker, armor_pos);
-        armor_marker.pose.orientation.z = std::sin(xyza[3] * 0.5);
-        armor_marker.pose.orientation.w = std::cos(xyza[3] * 0.5);
-        armor_marker.scale.x = target.armor_type == auto_aim::big ? 0.23 : 0.13;
-        armor_marker.scale.y = 0.04;
-        armor_marker.scale.z = 0.06;
-        setMarkerColor(armor_marker, 1.0, 0.8, 0.0, 0.45);
-        marker_array.markers.push_back(armor_marker);
-      }
+    if (targets.empty()) return marker_array;
 
-      auto text = baseMarker(header, "aim_v2/target_text", id++,
-        visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
-      setMarkerPosition(text, center + Eigen::Vector3d(0.0, 0.0, 0.18));
-      text.scale.z = 0.1;
-      setMarkerColor(text, 1.0, 1.0, 1.0, 1.0);
-      std::ostringstream label;
-      label << armorName(target.name) << " v_yaw=" << std::fixed << std::setprecision(2)
-            << (x.size() > 7 ? x[7] : 0.0);
-      text.text = label.str();
-      marker_array.markers.push_back(text);
+    const auto & target = targets.front();
+    const auto x = target.ekf_x();
+    if (x.size() < 8) return marker_array;
+
+    const Eigen::Vector3d center{x[0], x[2], x[4]};
+    const Eigen::Vector3d velocity{x[1], x[3], x[5]};
+    if (!finite3(center)) return marker_array;
+
+    auto position_marker =
+      baseMarker(header, "position", 0, visualization_msgs::msg::Marker::SPHERE);
+    setMarkerPosition(position_marker, center);
+    position_marker.scale.x = 0.1;
+    position_marker.scale.y = 0.1;
+    position_marker.scale.z = 0.1;
+    setMarkerColor(position_marker, 0.0, 1.0, 0.0, 1.0);
+    marker_array.markers.emplace_back(position_marker);
+
+    auto linear_v_marker =
+      baseMarker(header, "linear_v", 0, visualization_msgs::msg::Marker::ARROW);
+    linear_v_marker.points.emplace_back(toPoint(center));
+    linear_v_marker.points.emplace_back(toPoint(center + velocity));
+    linear_v_marker.scale.x = 0.03;
+    linear_v_marker.scale.y = 0.05;
+    setMarkerColor(linear_v_marker, 1.0, 1.0, 0.0, 1.0);
+    marker_array.markers.emplace_back(linear_v_marker);
+
+    auto angular_v_marker =
+      baseMarker(header, "angular_v", 0, visualization_msgs::msg::Marker::ARROW);
+    angular_v_marker.points.emplace_back(toPoint(center));
+    angular_v_marker.points.emplace_back(toPoint(center + Eigen::Vector3d(0.0, 0.0, x[7] / kPi)));
+    angular_v_marker.scale.x = 0.03;
+    angular_v_marker.scale.y = 0.05;
+    setMarkerColor(angular_v_marker, 0.0, 1.0, 1.0, 1.0);
+    marker_array.markers.emplace_back(angular_v_marker);
+
+    int filtered_id = 0;
+    for (const auto & xyza : target.armor_xyza_list()) {
+      if (!finite4(xyza)) continue;
+
+      const Eigen::Vector3d armor_pos{xyza[0], xyza[1], xyza[2]};
+      if (!finite3(armor_pos)) continue;
+
+      auto filtered_marker =
+        baseMarker(header, "filtered_armors", filtered_id++, visualization_msgs::msg::Marker::CUBE);
+      setMarkerPosition(filtered_marker, armor_pos);
+      setMarkerYawPitch(
+        filtered_marker, xyza[3],
+        target.name == auto_aim::outpost ? -15.0 * kPi / 180.0 : 15.0 * kPi / 180.0);
+      setArmorMarkerShape(filtered_marker, target.armor_type, 0.125);
+      setMarkerColor(filtered_marker, 0.0, 0.0, 1.0, 1.0);
+      marker_array.markers.emplace_back(filtered_marker);
     }
 
-    debug_marker_pub_->publish(marker_array);
+    const auto distance = estimateDistance(targets);
+    if (output.control && distance > 0.0) {
+      const Eigen::Vector3d selection{
+        distance * std::cos(output.yaw_rad), distance * std::sin(output.yaw_rad),
+        distance * std::sin(output.pitch_rad)};
+      auto selection_marker =
+        baseMarker(header, "selection", 0, visualization_msgs::msg::Marker::SPHERE);
+      setMarkerPosition(selection_marker, selection);
+      selection_marker.scale.x = 0.1;
+      selection_marker.scale.y = 0.1;
+      selection_marker.scale.z = 0.1;
+      setMarkerColor(selection_marker, 1.0, 1.0, 0.0, 1.0);
+      marker_array.markers.emplace_back(selection_marker);
+
+      auto trajectory_marker =
+        baseMarker(header, "trajectory", 0, visualization_msgs::msg::Marker::POINTS);
+      trajectory_marker.scale.x = 0.01;
+      trajectory_marker.scale.y = 0.01;
+      setMarkerColor(
+        trajectory_marker, output.shoot ? 0.0 : 1.0, 1.0, output.shoot ? 0.0 : 1.0, 1.0);
+      for (int i = 1; i <= 24; ++i) {
+        const double ratio = static_cast<double>(i) / 24.0;
+        trajectory_marker.points.emplace_back(toPoint(selection * ratio));
+      }
+      marker_array.markers.emplace_back(trajectory_marker);
+    }
+
+    auto future = target;
+    for (int step = 0; step < 10; ++step) {
+      if (step > 0) future.predict(0.04);
+
+      auto predicted_marker =
+        baseMarker(header, "predicted_sequence", step, visualization_msgs::msg::Marker::POINTS);
+      predicted_marker.scale.x = 0.05 + step * 0.001;
+      predicted_marker.scale.y = 0.05 + step * 0.001;
+      setPredictionColor(predicted_marker, step);
+
+      for (const auto & xyza : future.armor_xyza_list()) {
+        if (!finite4(xyza)) continue;
+        const Eigen::Vector3d p{xyza[0], xyza[1], xyza[2]};
+        if (finite3(p)) predicted_marker.points.emplace_back(toPoint(p));
+      }
+      marker_array.markers.emplace_back(predicted_marker);
+    }
+
+    return marker_array;
+  }
+
+  void publishDebugMarkers(
+    const std_msgs::msg::Header & header, const std::list<auto_aim::Armor> & armors,
+    const std::list<auto_aim::Target> & targets, const ControlOutput & output)
+  {
+    const auto detector_markers = buildDetectorMarkerArray(header, armors);
+    const auto solver_markers = buildSolverMarkerArray(header, armors, targets, output);
+
+    if (detector_marker_pub_) detector_marker_pub_->publish(detector_markers);
+    if (solver_marker_pub_) solver_marker_pub_->publish(solver_markers);
+
+    if (!debug_marker_pub_) return;
+
+    visualization_msgs::msg::MarkerArray combined;
+    combined.markers.push_back(clearMarker(header));
+    for (const auto & marker : detector_markers.markers) {
+      if (marker.action != visualization_msgs::msg::Marker::DELETEALL) {
+        combined.markers.push_back(marker);
+      }
+    }
+    for (const auto & marker : solver_markers.markers) {
+      if (marker.action != visualization_msgs::msg::Marker::DELETEALL) {
+        combined.markers.push_back(marker);
+      }
+    }
+    debug_marker_pub_->publish(combined);
   }
 
   bool isFiniteOutput(const ControlOutput & output) const
@@ -833,6 +1090,8 @@ private:
   rclcpp::Publisher<rm_interfaces::msg::GimbalCmd>::SharedPtr cmd_pub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr debug_image_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr debug_marker_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr detector_marker_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr solver_marker_pub_;
   rclcpp::Service<rm_interfaces::srv::SetMode>::SharedPtr set_mode_srv_;
   fyt::HeartBeatPublisher::SharedPtr heartbeat_;
 };

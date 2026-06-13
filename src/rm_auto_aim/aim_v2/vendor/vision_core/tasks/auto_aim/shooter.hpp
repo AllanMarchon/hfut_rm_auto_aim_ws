@@ -1,6 +1,9 @@
 #ifndef AUTO_AIM__SHOOTER_HPP
 #define AUTO_AIM__SHOOTER_HPP
 
+#include <Eigen/Dense>
+
+#include <list>
 #include <string>
 
 #include "io/command.hpp"
@@ -15,7 +18,7 @@ public:
 
   bool shoot(
     const io::Command & command, const auto_aim::Aimer & aimer,
-    const std::list<auto_aim::Target> & targets, const Eigen::Vector3d & gimbal_pos);
+    const std::list<auto_aim::Target> & targets, const Eigen::Vector2d & current_yaw_pitch);
 
 private:
   io::Command last_command_;

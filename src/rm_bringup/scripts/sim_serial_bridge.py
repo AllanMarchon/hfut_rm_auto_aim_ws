@@ -23,8 +23,11 @@ class SimSerialBridge(Node):
         self.declare_parameter("bullet_speed", 22.5)
         self.declare_parameter("publish_rate", 100.0)
         self.declare_parameter("roll", 0.0)
+        self.declare_parameter("yaw", 0.0)
+        self.declare_parameter("pitch", 0.0)
 
         self._latest_joint_state = None
+        self._warned_no_joint_state = False
         joint_states_topic = (
             self.get_parameter("joint_states_topic").get_parameter_value().string_value
         )
@@ -53,19 +56,30 @@ class SimSerialBridge(Node):
         self._latest_joint_state = msg
 
     def _publish_serial(self):
-        if self._latest_joint_state is None:
-            return
-
+        fallback_yaw = math.radians(
+            self.get_parameter("yaw").get_parameter_value().double_value
+        )
+        fallback_pitch = math.radians(
+            self.get_parameter("pitch").get_parameter_value().double_value
+        )
         joint_state = self._latest_joint_state
+        if joint_state is None and not self._warned_no_joint_state:
+            self.get_logger().warn(
+                "No joint state received yet; publishing configured yaw/pitch fallback."
+            )
+            self._warned_no_joint_state = True
+
         yaw_rad = self._joint_position(
             joint_state,
             self.get_parameter("yaw_joint_name").get_parameter_value().string_value,
             fallback_index=0,
+            fallback_value=fallback_yaw,
         )
         pitch_rad = self._joint_position(
             joint_state,
             self.get_parameter("pitch_joint_name").get_parameter_value().string_value,
             fallback_index=1,
+            fallback_value=fallback_pitch,
         )
 
         msg = SerialReceiveData()
@@ -83,14 +97,18 @@ class SimSerialBridge(Node):
         self._pub.publish(msg)
 
     @staticmethod
-    def _joint_position(msg: JointState, joint_name: str, fallback_index: int) -> float:
+    def _joint_position(
+        msg, joint_name: str, fallback_index: int, fallback_value: float
+    ) -> float:
+        if msg is None:
+            return fallback_value
         if joint_name in msg.name:
             index = msg.name.index(joint_name)
             if index < len(msg.position):
                 return msg.position[index]
         if fallback_index < len(msg.position):
             return msg.position[fallback_index]
-        return 0.0
+        return fallback_value
 
 
 def main():

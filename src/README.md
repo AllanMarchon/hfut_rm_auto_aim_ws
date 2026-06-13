@@ -285,8 +285,27 @@ nano src/rm_bringup/config/video_player_params.yaml
 ros2 launch rm_bringup bringup_v2.launch.py \
   image_source:=video \
   virtual_serial:=true \
-  enable_fire:=false
+  enable_fire:=false \
+  detector_type:=traditional \
+  control_backend:=aimer
 ```
+
+如果只是先确认“检测器是否能在视频上出框”，建议先关闭串口模式限制并强制敌方颜色，避免 `vision_mode` 把检测结果按颜色过滤掉：
+
+```bash
+ros2 launch rm_bringup bringup_v2.launch.py \
+  image_source:=video \
+  virtual_serial:=true \
+  require_serial:=false \
+  respect_mode:=false \
+  enable_fire:=false \
+  detector_type:=traditional \
+  control_backend:=aimer \
+  enemy_color:=red \
+  derive_enemy_color_from_mode:=false
+```
+
+如果视频里是蓝色装甲板，把 `enemy_color:=red` 改成 `enemy_color:=blue`。
 
 判断图像是否正常发布：
 
@@ -296,6 +315,49 @@ ros2 topic list | grep gimbal_pipeline
 ```
 
 如果要使用海康或 MindVision 实体相机，再单独安装相机 SDK 并编译对应相机包。只跑视频链路时不需要编译 `ros2_hik_camera` 或 `mindvision_camera`。
+
+## Simulator 调试入口
+
+仿真链路的目标和视频链路一致：先让 `/image_raw`、`/serial/receive`、`/gimbal_pipeline/debug/image` 跑起来，再看 tracker 和控制输出。当前 `bringup_sim.launch.py` 默认使用 `detector_type:=traditional`，便于先看 detector 图像。
+
+```bash
+ros2 launch rm_bringup bringup_sim.launch.py \
+  launch_webots:=true \
+  detector_type:=traditional \
+  control_backend:=aimer \
+  enable_fire:=false
+```
+
+如果只想接入已经启动的仿真器，不让本 launch 拉起 Webots：
+
+```bash
+ros2 launch rm_bringup bringup_sim.launch.py \
+  launch_webots:=false \
+  image_topic:=/image_raw \
+  joint_states_topic:=/joint_states \
+  detector_type:=traditional \
+  control_backend:=aimer \
+  enable_fire:=false
+```
+
+`sim_serial_bridge` 会把 `/joint_states` 转成 `/serial/receive`。如果暂时没有 `/joint_states`，它会用 `yaw`、`pitch`、`roll` 参数兜底继续发布串口模拟量，避免 `aim_v2` 因为没有串口反馈而完全不处理图像。
+
+闭环打靶按三步验证：
+
+1. `enable_fire:=false`，Foxglove 看 `/gimbal_pipeline/debug/image`，确认有 `D` 检测框和 `T` 跟踪目标。
+2. 仍然保持 `enable_fire:=false`，确认目标会往画面中心收敛。如果方向反了，只翻转对应参数，例如 `webots_yaw_sign:=-1.0` 或 `webots_pitch_sign:=1.0`。
+3. 方向和 `cmd_gimbal` 正常后再用 `enable_fire:=true`，并查看 `/webots/score`。
+
+常用检查命令：
+
+```bash
+ros2 topic hz /image_raw
+ros2 topic hz /serial/receive
+ros2 topic echo /armor_solver/cmd_gimbal --once
+ros2 topic echo /webots/score
+```
+
+`bringup_sim.launch.py` 默认会给 `aim_v2` 注入 Webots 相机内参、零畸变和仿真外参；实车和视频链路仍使用各自配置，不要为了仿真直接改 `aim_v2.yaml` 的实车标定。
 
 ## Foxglove 可视化
 
@@ -315,8 +377,8 @@ SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。`aim_v2` 仍然�
 
 推荐先看这些：
 
-- `/gimbal_pipeline/debug/image`：二维调试图，包含检测板轮廓、跟踪模型板重投影、最终瞄准点。
-- `/armor_detector/marker`：兼容旧版检测可视化，namespace 主要是 `armors` 和 `classification`。
+- `/gimbal_pipeline/debug/image`：二维调试图，包含 detector 原始检测板轮廓、跟踪模型板重投影、最终瞄准点。`D` 开头的是 detector 原始结果，`T` 开头的是 tracker/模型结果。
+- `/armor_detector/marker`：兼容旧版检测可视化，namespace 主要是 `armors` 和 `classification`。这个话题显示 tracker 颜色过滤前的 detector 原始结果。
 - `/armor_solver/marker`：兼容旧版解算/预测可视化，namespace 主要是 `position`、`linear_v`、`angular_v`、`filtered_armors`、`selection`、`armor_points`、`predicted_sequence`。
 - `/gimbal_pipeline/debug/markers`：把上面两类 marker 合并到一个话题里，适合临时查看。
 

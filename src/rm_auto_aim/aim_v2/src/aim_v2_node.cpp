@@ -22,11 +22,13 @@
 #include <fstream>
 #include <iomanip>
 #include <list>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <queue>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -39,7 +41,6 @@
 #include "tasks/auto_aim/solver.hpp"
 #include "tasks/auto_aim/tracker.hpp"
 #include "tasks/auto_aim/yolo.hpp"
-#include "tools/math_tools.hpp"
 
 namespace aim_v2
 {
@@ -111,8 +112,10 @@ public:
     auto_aim_modes_ = declare_parameter<std::vector<int64_t>>("auto_aim_modes", {0, 1});
     serial_.bullet_speed = default_bullet_speed_;
     const auto enemy_color = declare_parameter<std::string>("enemy_color", "");
+    const auto runtime_config_overrides = declareRuntimeConfigOverrides(config_path_);
 
-    runtime_config_path_ = materializeRuntimeConfig(config_path_, share_dir, enemy_color);
+    runtime_config_path_ =
+      materializeRuntimeConfig(config_path_, share_dir, enemy_color, runtime_config_overrides);
 
     solver_ = std::make_unique<auto_aim::Solver>(runtime_config_path_);
     tracker_ = std::make_unique<auto_aim::Tracker>(runtime_config_path_, *solver_);
@@ -235,8 +238,65 @@ private:
     double pitch_acc_rad = 0.0;
   };
 
+  struct RuntimeConfigOverrides
+  {
+    std::vector<double> camera_matrix;
+    std::vector<double> distort_coeffs;
+    std::vector<double> R_camera2gimbal;
+    std::vector<double> t_camera2gimbal;
+    double yaw_offset = 0.0;
+    double pitch_offset = 0.0;
+  };
+
+  RuntimeConfigOverrides declareRuntimeConfigOverrides(const std::string & source_config)
+  {
+    const auto yaml = YAML::LoadFile(source_config);
+    auto read_vector = [&](const char * key, std::size_t expected_size) {
+      auto values = yaml[key].as<std::vector<double>>();
+      if (values.size() != expected_size) {
+        throw std::runtime_error(
+          std::string("aim_v2 config key '") + key + "' expects " +
+          std::to_string(expected_size) + " values, got " + std::to_string(values.size()));
+      }
+      return values;
+    };
+
+    RuntimeConfigOverrides overrides;
+    overrides.camera_matrix =
+      declare_parameter<std::vector<double>>("camera_matrix", read_vector("camera_matrix", 9));
+    overrides.distort_coeffs =
+      declare_parameter<std::vector<double>>("distort_coeffs", read_vector("distort_coeffs", 5));
+    overrides.R_camera2gimbal =
+      declare_parameter<std::vector<double>>("R_camera2gimbal", read_vector("R_camera2gimbal", 9));
+    overrides.t_camera2gimbal =
+      declare_parameter<std::vector<double>>("t_camera2gimbal", read_vector("t_camera2gimbal", 3));
+    overrides.yaw_offset = declare_parameter<double>("yaw_offset", yaml["yaw_offset"].as<double>());
+    overrides.pitch_offset =
+      declare_parameter<double>("pitch_offset", yaml["pitch_offset"].as<double>());
+    return overrides;
+  }
+
+  static void applyVectorOverride(
+    YAML::Node & yaml, const char * key, const std::vector<double> & values,
+    std::size_t expected_size)
+  {
+    if (values.empty()) return;
+    if (values.size() != expected_size) {
+      throw std::runtime_error(
+        std::string("aim_v2 parameter '") + key + "' expects " +
+        std::to_string(expected_size) + " values, got " + std::to_string(values.size()));
+    }
+    yaml[key] = values;
+  }
+
+  static void applyScalarOverride(YAML::Node & yaml, const char * key, double value)
+  {
+    yaml[key] = value;
+  }
+
   std::string materializeRuntimeConfig(
-    const std::string & source_config, const std::string & share_dir, const std::string & enemy_color)
+    const std::string & source_config, const std::string & share_dir, const std::string & enemy_color,
+    const RuntimeConfigOverrides & overrides)
   {
     YAML::Node yaml = YAML::LoadFile(source_config);
     const auto share_path = std::filesystem::path(share_dir);
@@ -259,6 +319,13 @@ private:
     if (!enemy_color.empty()) {
       yaml["enemy_color"] = enemy_color;
     }
+
+    applyVectorOverride(yaml, "camera_matrix", overrides.camera_matrix, 9);
+    applyVectorOverride(yaml, "distort_coeffs", overrides.distort_coeffs, 5);
+    applyVectorOverride(yaml, "R_camera2gimbal", overrides.R_camera2gimbal, 9);
+    applyVectorOverride(yaml, "t_camera2gimbal", overrides.t_camera2gimbal, 3);
+    applyScalarOverride(yaml, "yaw_offset", overrides.yaw_offset);
+    applyScalarOverride(yaml, "pitch_offset", overrides.pitch_offset);
 
     const auto output_path =
       std::filesystem::temp_directory_path() /
@@ -386,17 +453,22 @@ private:
     try {
       std::list<auto_aim::Target> targets;
       ControlOutput output;
+      auto detected_armors = armors;
 
       {
         std::lock_guard<std::mutex> lock(core_mutex_);
         solver_->set_R_gimbal2world(
           makeGimbalQuaternion(serial.roll_deg, serial.pitch_deg, serial.yaw_deg));
-        targets = tracker_->track(armors, timestamp);
+        solveDetectedArmors(detected_armors);
+        auto tracking_armors = detected_armors;
+        tracking_armors.remove_if(
+          [this](const auto_aim::Armor & armor) { return !finite3(armor.xyz_in_world); });
+        targets = tracker_->track(tracking_armors, timestamp);
         output = buildControlOutput(targets, timestamp, serial);
       }
 
       publishCommand(header, output, targets, serial);
-      publishDebug(header, image, armors, targets, output);
+      publishDebug(header, image, detected_armors, targets, output);
     } catch (const std::exception & e) {
       RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 1000, "aim_v2 frame failed: %s", e.what());
       publishIdle(header);
@@ -441,8 +513,8 @@ private:
     auto command = aimer_->aim(targets, timestamp, serial.bullet_speed);
 
     if (command.control && enable_fire_) {
-      const Eigen::Vector3d ypr = tools::eulers(solver_->R_gimbal2world(), 2, 1, 0);
-      command.shoot = shooter_->shoot(command, *aimer_, targets, ypr);
+      const Eigen::Vector2d current_yaw_pitch{degToRad(serial.yaw_deg), degToRad(serial.pitch_deg)};
+      command.shoot = shooter_->shoot(command, *aimer_, targets, current_yaw_pitch);
     } else {
       command.shoot = false;
     }
@@ -491,6 +563,32 @@ private:
     auto context = async_contexts_.front();
     async_contexts_.pop();
     return context;
+  }
+
+  void invalidateArmorPose(auto_aim::Armor & armor) const
+  {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    armor.xyz_in_gimbal = Eigen::Vector3d(nan, nan, nan);
+    armor.xyz_in_world = Eigen::Vector3d(nan, nan, nan);
+    armor.ypr_in_gimbal = Eigen::Vector3d(nan, nan, nan);
+    armor.ypr_in_world = Eigen::Vector3d(nan, nan, nan);
+    armor.ypd_in_world = Eigen::Vector3d(nan, nan, nan);
+  }
+
+  void solveDetectedArmors(std::list<auto_aim::Armor> & armors)
+  {
+    for (auto & armor : armors) {
+      invalidateArmorPose(armor);
+      if (armor.points.size() < 4) continue;
+
+      try {
+        solver_->solve(armor);
+      } catch (const std::exception & e) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000, "aim_v2 solve detected armor failed: %s", e.what());
+        invalidateArmorPose(armor);
+      }
+    }
   }
 
   void publishIdle(const std_msgs::msg::Header & header)

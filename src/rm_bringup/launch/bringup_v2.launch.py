@@ -8,6 +8,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, PushRosNamespace
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -190,17 +191,28 @@ def generate_launch_description():
         emulate_tty=True,
         parameters=[
             {
-                "respect_mode": LaunchConfiguration("respect_mode"),
-                "require_serial": LaunchConfiguration("require_serial"),
-                "enable_fire": LaunchConfiguration("enable_fire"),
+                "respect_mode": ParameterValue(
+                    LaunchConfiguration("respect_mode"), value_type=bool
+                ),
+                "require_serial": ParameterValue(
+                    LaunchConfiguration("require_serial"), value_type=bool
+                ),
+                "enable_fire": ParameterValue(
+                    LaunchConfiguration("enable_fire"), value_type=bool
+                ),
                 "control_backend": LaunchConfiguration("control_backend"),
                 "enemy_color": LaunchConfiguration("enemy_color"),
-                "derive_enemy_color_from_mode": LaunchConfiguration(
-                    "derive_enemy_color_from_mode"
+                "derive_enemy_color_from_mode": ParameterValue(
+                    LaunchConfiguration("derive_enemy_color_from_mode"),
+                    value_type=bool,
                 ),
-                "async_inference": LaunchConfiguration("async_inference"),
+                "async_inference": ParameterValue(
+                    LaunchConfiguration("async_inference"), value_type=bool
+                ),
                 "detector_type": LaunchConfiguration("detector_type"),
-                "debug_visualization": LaunchConfiguration("debug_visualization"),
+                "debug_visualization": ParameterValue(
+                    LaunchConfiguration("debug_visualization"), value_type=bool
+                ),
             }
         ],
         remappings=[

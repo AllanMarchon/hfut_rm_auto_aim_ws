@@ -14,6 +14,26 @@ def _truthy(value):
     return value.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _launch_value(context, name):
+    return LaunchConfiguration(name).perform(context)
+
+
+def _launch_float(context, name):
+    return float(_launch_value(context, name))
+
+
+def _launch_bool(context, name):
+    return _truthy(_launch_value(context, name))
+
+
+def _float_list(value, expected_size, name):
+    tokens = value.replace("[", " ").replace("]", " ").replace(",", " ").split()
+    values = [float(token) for token in tokens]
+    if len(values) != expected_size:
+        raise RuntimeError(f"{name} expects {expected_size} values, got {len(values)}")
+    return values
+
+
 def _default_sim_dir():
     env_dir = os.environ.get("HFUT_AUTO_AIM_SIM_DIR", "")
     if env_dir and (Path(env_dir) / "run_stationary_spin_target_test.sh").is_file():
@@ -56,6 +76,14 @@ def _start_webots(context):
             additional_env={
                 "WEBOTS_IMAGE_TOPIC": LaunchConfiguration("image_topic"),
                 "WEBOTS_CAMERA_INFO_TOPIC": LaunchConfiguration("camera_info_topic"),
+                "WEBOTS_CAMERA_WIDTH": LaunchConfiguration("camera_width"),
+                "WEBOTS_CAMERA_HEIGHT": LaunchConfiguration("camera_height"),
+                "WEBOTS_CAMERA_FX": LaunchConfiguration("camera_fx"),
+                "WEBOTS_CAMERA_FY": LaunchConfiguration("camera_fy"),
+                "WEBOTS_CAMERA_CX": LaunchConfiguration("camera_cx"),
+                "WEBOTS_CAMERA_CY": LaunchConfiguration("camera_cy"),
+                "WEBOTS_CAMERA_DISTORTION_MODEL": "plumb_bob",
+                "WEBOTS_CAMERA_D": LaunchConfiguration("distort_coeffs"),
                 "WEBOTS_JOINT_STATES_TOPIC": LaunchConfiguration("joint_states_topic"),
                 "WEBOTS_GIMBAL_CMD_TOPIC": LaunchConfiguration("cmd_topic"),
                 "WEBOTS_SERIAL_MODE": LaunchConfiguration("vision_mode"),
@@ -63,8 +91,62 @@ def _start_webots(context):
                 "WEBOTS_SET_MODE_SERVICES": "gimbal_pipeline/set_mode",
                 "WEBOTS_CAMERA_FOLLOW_CMD_GIMBAL": "true",
                 "WEBOTS_GIMBAL_USE_DIFF_COMMANDS": "false",
+                "WEBOTS_GIMBAL_WEBOTS_YAW_SIGN": LaunchConfiguration("webots_yaw_sign"),
+                "WEBOTS_GIMBAL_WEBOTS_PITCH_SIGN": LaunchConfiguration("webots_pitch_sign"),
                 "WEBOTS_IMAGE_ENCODING": "bgr8",
             },
+        )
+    ]
+
+
+def _start_aim_v2(context):
+    fx = _launch_float(context, "camera_fx")
+    fy = _launch_float(context, "camera_fy")
+    cx = _launch_float(context, "camera_cx")
+    cy = _launch_float(context, "camera_cy")
+    camera_matrix = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
+    distort_coeffs = _float_list(_launch_value(context, "distort_coeffs"), 5, "distort_coeffs")
+    r_camera2gimbal = _float_list(
+        _launch_value(context, "R_camera2gimbal"), 9, "R_camera2gimbal"
+    )
+    t_camera2gimbal = _float_list(
+        _launch_value(context, "t_camera2gimbal"), 3, "t_camera2gimbal"
+    )
+
+    return [
+        Node(
+            package="aim_v2",
+            executable="aim_v2_node",
+            name="gimbal_pipeline",
+            output="both",
+            emulate_tty=True,
+            parameters=[
+                {
+                    "respect_mode": _launch_bool(context, "respect_mode"),
+                    "require_serial": _launch_bool(context, "require_serial"),
+                    "enable_fire": _launch_bool(context, "enable_fire"),
+                    "control_backend": _launch_value(context, "control_backend"),
+                    "enemy_color": _launch_value(context, "enemy_color"),
+                    "derive_enemy_color_from_mode": _launch_bool(
+                        context, "derive_enemy_color_from_mode"
+                    ),
+                    "async_inference": _launch_bool(context, "async_inference"),
+                    "detector_type": _launch_value(context, "detector_type"),
+                    "debug_visualization": _launch_bool(context, "debug_visualization"),
+                    "default_bullet_speed": _launch_float(context, "bullet_speed"),
+                    "camera_matrix": camera_matrix,
+                    "distort_coeffs": distort_coeffs,
+                    "R_camera2gimbal": r_camera2gimbal,
+                    "t_camera2gimbal": t_camera2gimbal,
+                    "yaw_offset": _launch_float(context, "yaw_offset"),
+                    "pitch_offset": _launch_float(context, "pitch_offset"),
+                }
+            ],
+            remappings=[
+                ("image_raw", _launch_value(context, "image_topic")),
+                ("serial/receive", _launch_value(context, "serial_topic")),
+                ("cmd_gimbal", _launch_value(context, "cmd_topic")),
+            ],
         )
     ]
 
@@ -88,6 +170,33 @@ def generate_launch_description():
     declare_image_topic = DeclareLaunchArgument("image_topic", default_value="/image_raw")
     declare_camera_info_topic = DeclareLaunchArgument(
         "camera_info_topic", default_value="/camera_info"
+    )
+    declare_camera_width = DeclareLaunchArgument("camera_width", default_value="1440")
+    declare_camera_height = DeclareLaunchArgument("camera_height", default_value="1080")
+    declare_camera_fx = DeclareLaunchArgument("camera_fx", default_value="1739.130435")
+    declare_camera_fy = DeclareLaunchArgument("camera_fy", default_value="1739.130435")
+    declare_camera_cx = DeclareLaunchArgument("camera_cx", default_value="719.5")
+    declare_camera_cy = DeclareLaunchArgument("camera_cy", default_value="539.5")
+    declare_distort_coeffs = DeclareLaunchArgument(
+        "distort_coeffs", default_value="0 0 0 0 0"
+    )
+    declare_r_camera2gimbal = DeclareLaunchArgument(
+        "R_camera2gimbal", default_value="0 0 1 -1 0 0 0 -1 0"
+    )
+    declare_t_camera2gimbal = DeclareLaunchArgument(
+        "t_camera2gimbal", default_value="0 0 0"
+    )
+    declare_yaw_offset = DeclareLaunchArgument("yaw_offset", default_value="0.0")
+    declare_pitch_offset = DeclareLaunchArgument("pitch_offset", default_value="0.0")
+    declare_webots_yaw_sign = DeclareLaunchArgument(
+        "webots_yaw_sign",
+        default_value="1.0",
+        description="Webots yaw motion sign; flip to -1.0 if yaw moves away from target.",
+    )
+    declare_webots_pitch_sign = DeclareLaunchArgument(
+        "webots_pitch_sign",
+        default_value="-1.0",
+        description="Webots pitch motion sign; flip to 1.0 if pitch moves away from target.",
     )
     declare_joint_states_topic = DeclareLaunchArgument(
         "joint_states_topic", default_value="/joint_states"
@@ -114,7 +223,9 @@ def generate_launch_description():
     declare_control_backend = DeclareLaunchArgument(
         "control_backend", default_value="aimer"
     )
-    declare_detector_type = DeclareLaunchArgument("detector_type", default_value="yolo")
+    declare_detector_type = DeclareLaunchArgument(
+        "detector_type", default_value="traditional"
+    )
     declare_async_inference = DeclareLaunchArgument(
         "async_inference", default_value="false"
     )
@@ -125,6 +236,9 @@ def generate_launch_description():
     declare_debug_visualization = DeclareLaunchArgument(
         "debug_visualization", default_value="true"
     )
+    declare_roll = DeclareLaunchArgument("roll", default_value="0.0")
+    declare_yaw = DeclareLaunchArgument("yaw", default_value="0.0")
+    declare_pitch = DeclareLaunchArgument("pitch", default_value="0.0")
 
     sim_serial_bridge = Node(
         package="rm_bringup",
@@ -142,50 +256,11 @@ def generate_launch_description():
                 "bullet_speed": ParameterValue(
                     LaunchConfiguration("bullet_speed"), value_type=float
                 ),
+                "roll": ParameterValue(LaunchConfiguration("roll"), value_type=float),
+                "yaw": ParameterValue(LaunchConfiguration("yaw"), value_type=float),
+                "pitch": ParameterValue(LaunchConfiguration("pitch"), value_type=float),
                 "frame_id": "odom",
             }
-        ],
-    )
-
-    aim_v2_node = Node(
-        package="aim_v2",
-        executable="aim_v2_node",
-        name="gimbal_pipeline",
-        output="both",
-        emulate_tty=True,
-        parameters=[
-            {
-                "respect_mode": ParameterValue(
-                    LaunchConfiguration("respect_mode"), value_type=bool
-                ),
-                "require_serial": ParameterValue(
-                    LaunchConfiguration("require_serial"), value_type=bool
-                ),
-                "enable_fire": ParameterValue(
-                    LaunchConfiguration("enable_fire"), value_type=bool
-                ),
-                "control_backend": LaunchConfiguration("control_backend"),
-                "enemy_color": LaunchConfiguration("enemy_color"),
-                "derive_enemy_color_from_mode": ParameterValue(
-                    LaunchConfiguration("derive_enemy_color_from_mode"),
-                    value_type=bool,
-                ),
-                "async_inference": ParameterValue(
-                    LaunchConfiguration("async_inference"), value_type=bool
-                ),
-                "detector_type": LaunchConfiguration("detector_type"),
-                "debug_visualization": ParameterValue(
-                    LaunchConfiguration("debug_visualization"), value_type=bool
-                ),
-                "default_bullet_speed": ParameterValue(
-                    LaunchConfiguration("bullet_speed"), value_type=float
-                ),
-            }
-        ],
-        remappings=[
-            ("image_raw", LaunchConfiguration("image_topic")),
-            ("serial/receive", LaunchConfiguration("serial_topic")),
-            ("cmd_gimbal", LaunchConfiguration("cmd_topic")),
         ],
     )
 
@@ -196,6 +271,19 @@ def generate_launch_description():
             declare_scenario,
             declare_image_topic,
             declare_camera_info_topic,
+            declare_camera_width,
+            declare_camera_height,
+            declare_camera_fx,
+            declare_camera_fy,
+            declare_camera_cx,
+            declare_camera_cy,
+            declare_distort_coeffs,
+            declare_r_camera2gimbal,
+            declare_t_camera2gimbal,
+            declare_yaw_offset,
+            declare_pitch_offset,
+            declare_webots_yaw_sign,
+            declare_webots_pitch_sign,
             declare_joint_states_topic,
             declare_serial_topic,
             declare_cmd_topic,
@@ -210,8 +298,11 @@ def generate_launch_description():
             declare_enemy_color,
             declare_derive_enemy_color,
             declare_debug_visualization,
+            declare_roll,
+            declare_yaw,
+            declare_pitch,
             OpaqueFunction(function=_start_webots),
             TimerAction(period=0.5, actions=[sim_serial_bridge]),
-            TimerAction(period=1.0, actions=[aim_v2_node]),
+            TimerAction(period=1.0, actions=[OpaqueFunction(function=_start_aim_v2)]),
         ]
     )

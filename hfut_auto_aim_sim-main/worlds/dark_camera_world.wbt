@@ -1,0 +1,256 @@
+#VRML_SIM R2025a utf8
+
+WorldInfo {
+  basicTimeStep 16
+  optimalThreadCount 4
+  coordinateSystem "ENU"
+}
+Viewpoint {
+  orientation 0.376105 0.825404 0.421346 1.73972
+  position -2.8 -2.2 1.45
+}
+Background {
+  skyColor [
+    0.012 0.013 0.016
+  ]
+}
+DirectionalLight {
+  ambientIntensity 0.55
+  intensity 1.045
+  direction 0.25 0.35 -1
+  castShadows FALSE
+}
+DEF GRAY_GROUND Solid {
+  translation 0 0 -0.025
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.24 0.25 0.24
+        roughness 0.92
+        metalness 0
+      }
+      geometry Box {
+        size 12 8 0.05
+      }
+      castShadows FALSE
+    }
+  ]
+  name "gray_ground"
+  boundingObject Box {
+    size 12 8 0.05
+  }
+  locked TRUE
+}
+# The RM_ARMOR_ROBOT root frame is the base_link frame.
+DEF RM_ARMOR_ROBOT Robot {
+  translation 3 0 0.165
+  rotation 0 0 1 0
+  controller "target_spinner"
+  supervisor TRUE
+  children [
+    Transform {
+      translation 0 0 0.055
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.10 0.12 0.13
+            roughness 0.65
+            metalness 0
+          }
+          geometry Box {
+            size 0.32 0.24 0.08
+          }
+          castShadows FALSE
+        }
+      ]
+    }
+    DEF FRONT_ARMOR Solid {
+      translation 0.2 0 0
+      rotation 0 0 1 -1.57079632679
+      children [
+        Transform {
+          rotation 1 0 0 0.2617993877991494
+          children [
+            Transform {
+              rotation 0 1 0 3.14159265359
+              children [
+                Transform {
+                  translation -0.0018354 -0.13427105 -0.01999975
+                  scale 0.001 0.001 0.001
+                  children [
+                    CadShape {
+                      url [
+                        "../meshes/armor_red4_body_plate_lights.obj"
+                      ]
+                      ccw TRUE
+                      castShadows FALSE
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      name "front_armor"
+      boundingObject Box {
+        size 0.135 0.080 0.135
+      }
+    }
+    DEF REAR_ARMOR Solid {
+      translation -0.2 0 0
+      rotation 0 0 1 1.57079632679
+      children [
+        Transform {
+          rotation 1 0 0 0.2617993877991494
+          children [
+            Transform {
+              rotation 0 1 0 3.14159265359
+              children [
+                Transform {
+                  translation -0.0018354 -0.13427105 -0.01999975
+                  scale 0.001 0.001 0.001
+                  children [
+                    CadShape {
+                      url [
+                        "../meshes/armor_red4_body_plate_lights.obj"
+                      ]
+                      ccw TRUE
+                      castShadows FALSE
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      name "rear_armor"
+      boundingObject Box {
+        size 0.135 0.080 0.135
+      }
+    }
+    DEF LEFT_ARMOR Solid {
+      translation 0 0.17 0.04
+      rotation 0 0 1 0
+      children [
+        Transform {
+          rotation 1 0 0 0.2617993877991494
+          children [
+            Transform {
+              rotation 0 1 0 3.14159265359
+              children [
+                Transform {
+                  translation -0.0018354 -0.13427105 -0.01999975
+                  scale 0.001 0.001 0.001
+                  children [
+                    CadShape {
+                      url [
+                        "../meshes/armor_red4_body_plate_lights.obj"
+                      ]
+                      ccw TRUE
+                      castShadows FALSE
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      name "left_armor"
+      boundingObject Box {
+        size 0.135 0.080 0.135
+      }
+    }
+    DEF RIGHT_ARMOR Solid {
+      translation 0 -0.17 0.04
+      rotation 0 0 1 3.14159265359
+      children [
+        Transform {
+          rotation 1 0 0 0.2617993877991494
+          children [
+            Transform {
+              rotation 0 1 0 3.14159265359
+              children [
+                Transform {
+                  translation -0.0018354 -0.13427105 -0.01999975
+                  scale 0.001 0.001 0.001
+                  children [
+                    CadShape {
+                      url [
+                        "../meshes/armor_red4_body_plate_lights.obj"
+                      ]
+                      ccw TRUE
+                      castShadows FALSE
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      name "right_armor"
+      boundingObject Box {
+        size 0.135 0.080 0.135
+      }
+    }
+  ]
+  name "rm_armor_robot"
+  boundingObject Transform {
+    translation 0 0 0.04
+    children [
+      Box {
+        size 0.48 0.42 0.18
+      }
+    ]
+  }
+  locked TRUE
+}
+DEF SIM_CAMERA_ROBOT Robot {
+  translation 0 0 0.405
+  rotation 0 0 1 0
+  supervisor TRUE
+  children [
+    DEF SIM_CAMERA_PITCH Transform {
+      rotation 0 1 0 0.0615886763227
+      children [
+        Transform {
+          rotation 1 0 0 0
+          children [
+            Shape {
+              appearance PBRAppearance {
+                baseColor 0.82 0.86 0.90
+                roughness 0.7
+                metalness 0
+              }
+              geometry Box {
+                size 0.10 0.08 0.08
+              }
+              castShadows FALSE
+            }
+            Camera {
+              name "camera"
+              rotation 0 0 1 0
+              fieldOfView 0.7850335620966933
+              width 1440
+              height 1080
+              near 0.05
+              far 30
+              antiAliasing TRUE
+              motionBlur 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+  name "sim_camera"
+  controller "ros2_image_publisher"
+}
+DEF SCORE_SYSTEM Robot {
+  supervisor TRUE
+  name "score_system"
+  controller "score_system"
+}

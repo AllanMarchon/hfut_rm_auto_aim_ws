@@ -9,6 +9,12 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+install(
+  PROGRAMS scripts/sim_serial_bridge.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME sim_serial_bridge
+)
+
 ament_auto_package(
   INSTALL_TO_SHARE
   launch

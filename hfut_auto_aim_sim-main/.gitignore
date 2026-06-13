@@ -1,0 +1,10 @@
+controllers/*/build/
+controllers/ros2_image_publisher/ros2_image_publisher
+controllers/target_spinner/target_spinner
+controllers/score_system/score_system
+
+__pycache__/
+*.pyc
+
+worlds/.*.wbproj
+worlds/.*.jpg

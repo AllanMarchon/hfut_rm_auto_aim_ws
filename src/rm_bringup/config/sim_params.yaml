@@ -1,6 +1,7 @@
-# Defaults used by rm_bringup/launch/bringup_sim.launch.py.
-# Keep simulator camera and aim_v2 runtime overrides in one place.
+# rm_bringup/launch/bringup_sim.launch.py 使用的仿真默认参数。
+# 仿真相机参数和 aim_v2 运行时覆盖参数统一放在这里维护。
 
+# Webots 相机内参和畸变参数。
 camera:
   width: 1440
   height: 1080
@@ -10,16 +11,19 @@ camera:
   cy: 539.5
   distort_coeffs: [0, 0, 0, 0, 0]
 
+# 相机坐标系到云台坐标系的外参，以及角度零偏。
 extrinsics:
   R_camera2gimbal: [0, 0, 1, -1, 0, 0, 0, -1, 0]
   t_camera2gimbal: [0, 0, 0]
   yaw_offset: 0.0
   pitch_offset: 0.0
 
+# Webots 云台运动方向符号。目标越打越偏时优先翻转对应符号。
 webots:
   yaw_sign: 1.0
   pitch_sign: -1.0
 
+# 仿真串口反馈默认值。
 serial:
   vision_mode: 0
   bullet_speed: 22.5

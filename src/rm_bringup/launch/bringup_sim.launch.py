@@ -182,17 +182,17 @@ def generate_launch_description():
     declare_sim_dir = DeclareLaunchArgument(
         "sim_dir",
         default_value=_default_sim_dir(),
-        description="Path to hfut_auto_aim_sim directory.",
+        description="hfut_auto_aim_sim 仿真器目录。",
     )
     declare_launch_webots = DeclareLaunchArgument(
         "launch_webots",
         default_value="true",
-        description="Launch Webots through the sim repository script.",
+        description="是否通过仿真器仓库脚本启动 Webots。",
     )
     declare_scenario = DeclareLaunchArgument(
         "scenario",
         default_value="stationary",
-        description="stationary or moving target scenario.",
+        description="目标场景：stationary 为静止目标，moving 为移动目标。",
     )
     declare_image_topic = DeclareLaunchArgument("image_topic", default_value="/image_raw")
     declare_camera_info_topic = DeclareLaunchArgument(
@@ -243,12 +243,12 @@ def generate_launch_description():
     declare_webots_yaw_sign = DeclareLaunchArgument(
         "webots_yaw_sign",
         default_value=_sim_default(sim_defaults, "webots", "yaw_sign", 1.0),
-        description="Webots yaw motion sign; flip to -1.0 if yaw moves away from target.",
+        description="Webots yaw 运动方向符号；如果 yaw 越打越偏，改成 -1.0。",
     )
     declare_webots_pitch_sign = DeclareLaunchArgument(
         "webots_pitch_sign",
         default_value=_sim_default(sim_defaults, "webots", "pitch_sign", -1.0),
-        description="Webots pitch motion sign; flip to 1.0 if pitch moves away from target.",
+        description="Webots pitch 运动方向符号；如果 pitch 越打越偏，改成 1.0。",
     )
     declare_joint_states_topic = DeclareLaunchArgument(
         "joint_states_topic", default_value="/joint_states"
@@ -262,12 +262,12 @@ def generate_launch_description():
     declare_vision_mode = DeclareLaunchArgument(
         "vision_mode",
         default_value=_sim_default(sim_defaults, "serial", "vision_mode", 0),
-        description="0 red auto-aim, 1 blue auto-aim.",
+        description="仿真串口模式：0 为红方自瞄，1 为蓝方自瞄。",
     )
     declare_bullet_speed = DeclareLaunchArgument(
         "bullet_speed",
         default_value=_sim_default(sim_defaults, "serial", "bullet_speed", 22.5),
-        description="Simulated bullet speed in m/s.",
+        description="仿真弹速，单位 m/s。",
     )
     declare_respect_mode = DeclareLaunchArgument("respect_mode", default_value="true")
     declare_require_serial = DeclareLaunchArgument("require_serial", default_value="true")

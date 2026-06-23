@@ -802,6 +802,19 @@ private:
       vis, status.str(), cv::Point(12, 24), cv::FONT_HERSHEY_SIMPLEX, 0.65,
       cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
 
+    const auto distance = estimateDistance(targets);
+    std::ostringstream target_status;
+    target_status << "target_id=" << (targets.empty() ? "-" : armorName(targets.front().name))
+                  << " distance=";
+    if (distance > 0.0) {
+      target_status << std::fixed << std::setprecision(2) << distance << "m";
+    } else {
+      target_status << "-";
+    }
+    cv::putText(
+      vis, target_status.str(), cv::Point(12, 50), cv::FONT_HERSHEY_SIMPLEX, 0.65,
+      cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
+
     auto msg = cv_bridge::CvImage(header, "bgr8", vis).toImageMsg();
     debug_image_pub_->publish(*msg);
   }

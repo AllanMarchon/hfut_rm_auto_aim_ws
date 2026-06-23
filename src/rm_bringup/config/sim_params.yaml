@@ -1,0 +1,25 @@
+# Defaults used by rm_bringup/launch/bringup_sim.launch.py.
+# Keep simulator camera and aim_v2 runtime overrides in one place.
+
+camera:
+  width: 1440
+  height: 1080
+  fx: 1739.130435
+  fy: 1739.130435
+  cx: 719.5
+  cy: 539.5
+  distort_coeffs: [0, 0, 0, 0, 0]
+
+extrinsics:
+  R_camera2gimbal: [0, 0, 1, -1, 0, 0, 0, -1, 0]
+  t_camera2gimbal: [0, 0, 0]
+  yaw_offset: 0.0
+  pitch_offset: 0.0
+
+webots:
+  yaw_sign: 1.0
+  pitch_sign: -1.0
+
+serial:
+  vision_mode: 0
+  bullet_speed: 22.5

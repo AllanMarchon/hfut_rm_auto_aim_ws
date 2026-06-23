@@ -359,6 +359,14 @@ ros2 topic echo /webots/score
 
 `bringup_sim.launch.py` 默认会给 `aim_v2` 注入 Webots 相机内参、零畸变和仿真外参；实车和视频链路仍使用各自配置，不要为了仿真直接改 `aim_v2.yaml` 的实车标定。
 
+这些仿真默认值集中放在：
+
+```text
+src/rm_bringup/config/sim_params.yaml
+```
+
+需要改 Webots 相机内参、`R_camera2gimbal`、`t_camera2gimbal`、`webots_yaw_sign`、`webots_pitch_sign` 或仿真弹速时，优先改这个文件；临时排查仍然可以在 `ros2 launch` 命令行里覆盖同名参数。
+
 ## Foxglove 可视化
 
 SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。`aim_v2` 仍然保留旧版 Foxglove/RViz 常用的 marker 话题，方便沿用原来的可视化习惯：
@@ -381,6 +389,14 @@ SP v2 版可以直接通过 `foxglove_bridge` 连接 Foxglove。`aim_v2` 仍然�
 - `/armor_detector/marker`：兼容旧版检测可视化，namespace 主要是 `armors` 和 `classification`。这个话题显示 tracker 颜色过滤前的 detector 原始结果。
 - `/armor_solver/marker`：兼容旧版解算/预测可视化，namespace 主要是 `position`、`linear_v`、`angular_v`、`filtered_armors`、`selection`、`armor_points`、`predicted_sequence`。
 - `/gimbal_pipeline/debug/markers`：把上面两类 marker 合并到一个话题里，适合临时查看。
+
+仓库里提供了一个 Foxglove 预设布局：
+
+```text
+src/rm_bringup/foxglove/auto_aim_debug.layout.json
+```
+
+在 Foxglove 里选择 `Layouts` -> `Import from file` 导入。这个布局默认打开调试图、3D marker、`cmd_gimbal` 曲线、串口消息和 `/webots/score`，适合视频链路和 Webots 仿真共用。
 
 启动桥接：
 

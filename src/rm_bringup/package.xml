@@ -12,6 +12,7 @@
   <depend>aim_v2</depend>
   <depend>rm_interfaces</depend>
   <depend>rm_serial_driver</depend>
+  <depend>python3-yaml</depend>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
   <depend>video_player</depend>

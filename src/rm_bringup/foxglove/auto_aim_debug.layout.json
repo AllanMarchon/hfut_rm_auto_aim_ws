@@ -1,0 +1,213 @@
+{
+  "configById": {
+    "Image!autoaim": {
+      "cameraState": {
+        "distance": 20,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {},
+      "transforms": {},
+      "topics": {},
+      "layers": {},
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "imageMode": {
+        "imageTopic": "/gimbal_pipeline/debug/image",
+        "calibrationTopic": "/camera_info"
+      }
+    },
+    "3D!autoaim": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 6,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "odom",
+      "scene": {
+        "transforms": {
+          "axisScale": 0.25,
+          "showLabel": true,
+          "lineWidth": 1,
+          "labelSize": 0.12,
+          "visible": true
+        },
+        "meshUpAxis": "z_up",
+        "labelScaleFactor": 0.08
+      },
+      "transforms": {},
+      "topics": {
+        "/armor_detector/marker": {
+          "visible": true,
+          "showOutlines": true,
+          "namespaces": {
+            "armors": { "visible": true },
+            "classification": { "visible": true }
+          }
+        },
+        "/armor_solver/marker": {
+          "visible": true,
+          "showOutlines": true,
+          "namespaces": {
+            "armor_points": { "visible": true },
+            "position": { "visible": true },
+            "linear_v": { "visible": true },
+            "angular_v": { "visible": true },
+            "filtered_armors": { "visible": true },
+            "selection": { "visible": true },
+            "trajectory": { "visible": true },
+            "predicted_sequence": { "visible": true }
+          }
+        },
+        "/gimbal_pipeline/debug/markers": {
+          "visible": false,
+          "showOutlines": true
+        }
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "Grid",
+          "instanceId": "grid",
+          "layerId": "foxglove.Grid",
+          "frameId": "odom",
+          "size": 8,
+          "divisions": 8,
+          "lineWidth": 1,
+          "color": "#3f7fbf",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "imageMode": {}
+    },
+    "Plot!cmd": {
+      "title": "Gimbal Command",
+      "paths": [
+        {
+          "value": "/armor_solver/cmd_gimbal.yaw_diff",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/armor_solver/cmd_gimbal.pitch_diff",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/armor_solver/cmd_gimbal.distance",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 240
+    },
+    "RawMessages!cmd": {
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/armor_solver/cmd_gimbal",
+      "fontSize": 12
+    },
+    "RawMessages!serial": {
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/serial/receive",
+      "fontSize": 12
+    },
+    "RawMessages!score": {
+      "diffEnabled": false,
+      "diffMethod": "custom",
+      "diffTopicPath": "",
+      "showFullMessageForDiff": false,
+      "topicPath": "/webots/score",
+      "fontSize": 12
+    },
+    "RosOut!logs": {
+      "searchTerms": [],
+      "minLogLevel": 1,
+      "nameFilter": {}
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "first": {
+      "first": "Image!autoaim",
+      "second": "3D!autoaim",
+      "direction": "row",
+      "splitPercentage": 58
+    },
+    "second": {
+      "first": "Plot!cmd",
+      "second": {
+        "first": {
+          "first": "RawMessages!cmd",
+          "second": "RawMessages!serial",
+          "direction": "row",
+          "splitPercentage": 50
+        },
+        "second": {
+          "first": "RawMessages!score",
+          "second": "RosOut!logs",
+          "direction": "row",
+          "splitPercentage": 50
+        },
+        "direction": "column",
+        "splitPercentage": 50
+      },
+      "direction": "column",
+      "splitPercentage": 45
+    },
+    "direction": "column",
+    "splitPercentage": 68
+  }
+}

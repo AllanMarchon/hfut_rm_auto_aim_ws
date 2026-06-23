@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+import yaml
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction, TimerAction
 from launch.substitutions import LaunchConfiguration
@@ -32,6 +34,29 @@ def _float_list(value, expected_size, name):
     if len(values) != expected_size:
         raise RuntimeError(f"{name} expects {expected_size} values, got {len(values)}")
     return values
+
+
+def _format_launch_default(value):
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return " ".join(str(item) for item in value)
+    return str(value)
+
+
+def _default_sim_params_path():
+    return Path(__file__).resolve().parent.parent / "config" / "sim_params.yaml"
+
+
+def _load_sim_defaults():
+    path = _default_sim_params_path()
+    with path.open("r", encoding="utf-8") as config_file:
+        return yaml.safe_load(config_file) or {}
+
+
+def _sim_default(defaults, section, key, fallback):
+    value = defaults.get(section, {}).get(key, fallback)
+    return _format_launch_default(value)
 
 
 def _default_sim_dir():
@@ -152,6 +177,8 @@ def _start_aim_v2(context):
 
 
 def generate_launch_description():
+    sim_defaults = _load_sim_defaults()
+
     declare_sim_dir = DeclareLaunchArgument(
         "sim_dir",
         default_value=_default_sim_dir(),
@@ -171,31 +198,56 @@ def generate_launch_description():
     declare_camera_info_topic = DeclareLaunchArgument(
         "camera_info_topic", default_value="/camera_info"
     )
-    declare_camera_width = DeclareLaunchArgument("camera_width", default_value="1440")
-    declare_camera_height = DeclareLaunchArgument("camera_height", default_value="1080")
-    declare_camera_fx = DeclareLaunchArgument("camera_fx", default_value="1739.130435")
-    declare_camera_fy = DeclareLaunchArgument("camera_fy", default_value="1739.130435")
-    declare_camera_cx = DeclareLaunchArgument("camera_cx", default_value="719.5")
-    declare_camera_cy = DeclareLaunchArgument("camera_cy", default_value="539.5")
+    declare_camera_width = DeclareLaunchArgument(
+        "camera_width", default_value=_sim_default(sim_defaults, "camera", "width", 1440)
+    )
+    declare_camera_height = DeclareLaunchArgument(
+        "camera_height", default_value=_sim_default(sim_defaults, "camera", "height", 1080)
+    )
+    declare_camera_fx = DeclareLaunchArgument(
+        "camera_fx", default_value=_sim_default(sim_defaults, "camera", "fx", 1739.130435)
+    )
+    declare_camera_fy = DeclareLaunchArgument(
+        "camera_fy", default_value=_sim_default(sim_defaults, "camera", "fy", 1739.130435)
+    )
+    declare_camera_cx = DeclareLaunchArgument(
+        "camera_cx", default_value=_sim_default(sim_defaults, "camera", "cx", 719.5)
+    )
+    declare_camera_cy = DeclareLaunchArgument(
+        "camera_cy", default_value=_sim_default(sim_defaults, "camera", "cy", 539.5)
+    )
     declare_distort_coeffs = DeclareLaunchArgument(
-        "distort_coeffs", default_value="0 0 0 0 0"
+        "distort_coeffs",
+        default_value=_sim_default(
+            sim_defaults, "camera", "distort_coeffs", [0, 0, 0, 0, 0]
+        ),
     )
     declare_r_camera2gimbal = DeclareLaunchArgument(
-        "R_camera2gimbal", default_value="0 0 1 -1 0 0 0 -1 0"
+        "R_camera2gimbal",
+        default_value=_sim_default(
+            sim_defaults, "extrinsics", "R_camera2gimbal", [0, 0, 1, -1, 0, 0, 0, -1, 0]
+        ),
     )
     declare_t_camera2gimbal = DeclareLaunchArgument(
-        "t_camera2gimbal", default_value="0 0 0"
+        "t_camera2gimbal",
+        default_value=_sim_default(sim_defaults, "extrinsics", "t_camera2gimbal", [0, 0, 0]),
     )
-    declare_yaw_offset = DeclareLaunchArgument("yaw_offset", default_value="0.0")
-    declare_pitch_offset = DeclareLaunchArgument("pitch_offset", default_value="0.0")
+    declare_yaw_offset = DeclareLaunchArgument(
+        "yaw_offset",
+        default_value=_sim_default(sim_defaults, "extrinsics", "yaw_offset", 0.0),
+    )
+    declare_pitch_offset = DeclareLaunchArgument(
+        "pitch_offset",
+        default_value=_sim_default(sim_defaults, "extrinsics", "pitch_offset", 0.0),
+    )
     declare_webots_yaw_sign = DeclareLaunchArgument(
         "webots_yaw_sign",
-        default_value="1.0",
+        default_value=_sim_default(sim_defaults, "webots", "yaw_sign", 1.0),
         description="Webots yaw motion sign; flip to -1.0 if yaw moves away from target.",
     )
     declare_webots_pitch_sign = DeclareLaunchArgument(
         "webots_pitch_sign",
-        default_value="-1.0",
+        default_value=_sim_default(sim_defaults, "webots", "pitch_sign", -1.0),
         description="Webots pitch motion sign; flip to 1.0 if pitch moves away from target.",
     )
     declare_joint_states_topic = DeclareLaunchArgument(
@@ -209,12 +261,12 @@ def generate_launch_description():
     )
     declare_vision_mode = DeclareLaunchArgument(
         "vision_mode",
-        default_value="0",
+        default_value=_sim_default(sim_defaults, "serial", "vision_mode", 0),
         description="0 red auto-aim, 1 blue auto-aim.",
     )
     declare_bullet_speed = DeclareLaunchArgument(
         "bullet_speed",
-        default_value="22.5",
+        default_value=_sim_default(sim_defaults, "serial", "bullet_speed", 22.5),
         description="Simulated bullet speed in m/s.",
     )
     declare_respect_mode = DeclareLaunchArgument("respect_mode", default_value="true")
